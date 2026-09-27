@@ -1,0 +1,173 @@
+<!doctype html>
+<meta charset="utf-8" />
+<!--
+  The renderer behind a ```mermaid fence in the desktop app.
+
+  It is a local page, not a network one: mermaid.min.js sits beside this file
+  in the app's assets, so a diagram renders with no daemon and no internet.
+
+  The host does not build the page per diagram. It loads this once, then calls
+  `window.senclawRender(source, theme)`; the page answers by measuring the SVG
+  and reporting its size back through the InAppWebView bridge, which is how the
+  Flutter side learns what height to give the view. Without that the diagram
+  would sit in a fixed box and be cropped or float in empty space.
+-->
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    overflow: hidden;
+  }
+  /* Centred in the bubble: a TD flowchart is narrow and tall, and left-aligned
+     it leaves a wide empty gutter beside itself. */
+  #out {
+    padding: 8px;
+    display: flex;
+    /* Column so the "adjusted" note sits under the diagram, not beside it. */
+    flex-direction: column;
+    align-items: center;
+  }
+  /* Scaled down to fit rather than scrolled sideways — a diagram you have to
+     drag to read is worse than a smaller one you can see whole. */
+  #out svg { max-width: 100%; height: auto; display: block; }
+  /* A diagram that fails to parse shows its source, the same as on the web. */
+  #err {
+    margin: 8px;
+    font: 12px ui-monospace, Menlo, monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+</style>
+<div id="out"></div>
+<pre id="err" hidden></pre>
+<script src="mermaid.min.js"></script>
+<script>
+  const out = document.getElementById('out');
+  const err = document.getElementById('err');
+  let seq = 0;
+
+  function measureAndSend(ok, message) {
+    // `scrollHeight` on the wrapper, not the body: the body is height 0 with
+    // an absolutely-sized SVG inside it on some WebKit builds.
+    const h = Math.max(out.scrollHeight, err.hidden ? 0 : err.scrollHeight) + 8;
+    const w = out.scrollWidth;
+    if (window.flutter_inappwebview) {
+      window.flutter_inappwebview.callHandler(
+        'senclawMermaid', { ok: ok, height: h, width: w, error: message || '' });
+    }
+  }
+
+  function report(ok, message) {
+    // Measured two frames out, never inline. Straight after `innerHTML` the
+    // SVG has not been laid out against its scaled width and the web font has
+    // not settled, so the height comes back near zero — the host then sizes
+    // the view to a sliver and the diagram is cropped until something else
+    // triggers a re-measure. One frame is enough for layout, the second for
+    // the font swap.
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { measureAndSend(ok, message); });
+    });
+  }
+
+  /**
+   * One conservative repair pass for a diagram mermaid refuses. Mirrors
+   * `web/src/utils/mermaidFence.ts` repairMermaid — two copies because the
+   * two clients cannot share a function, so a change here belongs there too.
+   *
+   * Applied only after the source as written has failed, so a valid diagram
+   * is never rewritten. It fixes the two mistakes that account for almost
+   * every real failure: parentheses or commas in an unquoted edge label
+   * (`-->|Tai (PNG, MP3)|`, where the `(` is read as a node shape), and a
+   * literal backslash-n written where mermaid wants `<br/>`.
+   */
+  function repairMermaid(src) {
+    return src
+      .replace(/\|([^|\n]*)\|/g, function (whole, inner) {
+        const t = inner.trim();
+        if (!t || (t.charAt(0) === '"' && t.charAt(t.length - 1) === '"')) return whole;
+        return '|"' + t.replace(/"/g, '&quot;') + '"|';
+      })
+      .replace(/\\n/g, '<br/>');
+  }
+
+  window.senclawRender = async function (source, theme, textColor) {
+    err.hidden = true;
+    err.textContent = '';
+    out.innerHTML = '';
+    if (textColor) err.style.color = textColor;
+    try {
+      mermaid.initialize({
+        startOnLoad: false,
+        // The source comes from a model, so no raw HTML in labels and no
+        // click directives.
+        securityLevel: 'strict',
+        theme: theme === 'dark' ? 'dark' : 'default',
+        fontFamily: 'inherit',
+      });
+      // `parse` rejects an incomplete graph — that is how a block that is
+      // still streaming is told apart from one that is simply wrong.
+      let text = source;
+      let repaired = false;
+      try {
+        await mermaid.parse(text);
+      } catch (first) {
+        // One repair attempt. If it still will not parse, the *original*
+        // error is what gets shown: the repaired text is not what the author
+        // wrote, so its error would point at the wrong thing.
+        text = repairMermaid(source);
+        try {
+          await mermaid.parse(text);
+          repaired = true;
+        } catch (_) {
+          throw first;
+        }
+      }
+      const res = await mermaid.render('d' + (++seq), text);
+      out.innerHTML = res.svg;
+      if (repaired) {
+        // Said out loud: a silently adjusted diagram that differs from the
+        // text above it is impossible to account for.
+        const note = document.createElement('div');
+        note.textContent = 'Sơ đồ đã được chỉnh nhẹ cú pháp để vẽ được.';
+        note.style.cssText =
+          'font:11px -apple-system,system-ui,sans-serif;margin:4px 0 0;opacity:.65';
+        if (textColor) note.style.color = textColor;
+        out.appendChild(note);
+      }
+      report(true);
+    } catch (e) {
+      // Never blank: show what could not be drawn, and why.
+      err.hidden = false;
+      err.textContent = source + '\n\n' + (e && e.message ? e.message : String(e));
+      report(false, e && e.message ? e.message : String(e));
+    }
+  };
+
+  // Scaling to fit means the height depends on the view's width, so a resized
+  // window invalidates the measurement the host is sizing itself to. Re-report
+  // instead of leaving the diagram cropped or floating in a stale box.
+  // The web font finishing after the second frame would leave the same stale
+  // height, so re-report once it has.
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () {
+      if (document.querySelector('#out svg') || !err.hidden) report(err.hidden);
+    });
+  }
+
+  let resizeTimer = 0;
+  window.addEventListener('resize', function () {
+    if (!document.querySelector('#out svg') && err.hidden) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { report(err.hidden); }, 120);
+  });
+
+  if (window.flutter_inappwebview) {
+    window.flutter_inappwebview.callHandler('senclawMermaidReady', {});
+  } else {
+    // The bridge attaches a tick after load on some platforms.
+    window.addEventListener('flutterInAppWebViewPlatformReady', function () {
+      window.flutter_inappwebview.callHandler('senclawMermaidReady', {});
+    });
+  }
+</script>

@@ -1,0 +1,404 @@
+name: Desktop build
+
+# Ported from the old monorepo's .github/workflows/desktop.yml for the
+# post-split layout: senclaw (daemon) and web-app (React web UI) are now
+# SIBLING repos, not subdirectories of this one, so every job that needs them
+# checks them out explicitly under ../senclaw / ../web-app. Cross-repo
+# `paths:` filtering only ever sees THIS repo's own commits — a daemon-only
+# change no longer triggers a build here, which is expected: that repo has its
+# own CI.
+#
+# Sibling repos are assumed to live under the same GitHub owner as this repo
+# (github.repository_owner). If any of them is private, add a token with
+# read access to all three repos as the `CROSS_REPO_TOKEN` secret; the public
+# default GITHUB_TOKEN only ever sees the repo the workflow runs in.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - "lib/**"
+      - "macos/**"
+      - "windows/**"
+      - "linux/**"
+      - "web/**"
+      - "update_desktop/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "Makefile"
+      - ".github/workflows/desktop.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "lib/**"
+      - "macos/**"
+      - "windows/**"
+      - "linux/**"
+      - "web/**"
+      - "update_desktop/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "Makefile"
+      - ".github/workflows/desktop.yml"
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: "3.41.6"
+  # Skip debuginfo in CI dev/test builds — big compile + cache-size win,
+  # backtraces in CI logs aren't worth the minutes.
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+  # Where sibling checkouts land, relative to the runner's workspace root —
+  # every `../senclaw` / `../web-app` path below assumes this repo is checked
+  # out at `desktop/` alongside them.
+  CHECKOUT_TOKEN: ${{ secrets.CROSS_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+
+jobs:
+  # ── Quick CI check on branch pushes / PRs ────────────────────────────────────
+  # Skipped on tag pushes: a release tag is cut from a main commit that this
+  # job already validated, and re-running it would serialize the (long)
+  # desktop matrix behind it for nothing.
+  #
+  # Only update_desktop/ has Rust in this repo — the daemon's own `cargo test
+  # --workspace` runs in the senclaw repo's own CI, not here.
+  check:
+    name: Cargo test (update_desktop) + Flutter analyze/test
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: desktop
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "desktop/update_desktop -> target"
+
+      - name: Cargo test (update_desktop)
+        working-directory: desktop/update_desktop
+        run: cargo test
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      # On failure the LOG TAIL becomes ::error:: check-run annotations —
+      # readable through the public API without auth, unlike the raw step log.
+      - name: Flutter analyze + test
+        working-directory: desktop
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! { flutter pub get && flutter analyze && flutter test; } 2>&1 | tee /tmp/flutter.log; then
+            tail -n 9 /tmp/flutter.log \
+              | while IFS= read -r line; do echo "::error title=flutter::${line}"; done
+            exit 1
+          fi
+
+  # ── Full desktop bundle — only on tags or workflow_dispatch ─────────────────
+  # Daemon (cargo, release) builds FIRST from the sibling senclaw checkout,
+  # then the Flutter app, then bundling. No `needs: check` — tags start
+  # building immediately instead of waiting behind a redundant re-check.
+  build:
+    name: Build ${{ matrix.target }}
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            platform: macos
+          # x86_64-apple-darwin (macos-13, Intel) temporarily disabled —
+          # re-enable when an Intel build is actually needed.
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: desktop
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/senclaw
+          token: ${{ env.CHECKOUT_TOKEN }}
+          path: senclaw
+
+      - name: Install Linux desktop deps (GTK + tray + gstreamer)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev \
+            libayatana-appindicator3-dev \
+            libssl-dev \
+            libunwind-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libnotify-dev \
+            libkeybinder-3.0-dev
+        # NOTE: libunwind-dev is named explicitly — the GitHub runner image
+        # ships libunwind-14-dev, which apt refuses to auto-swap when it is
+        # only a transitive dependency of libgstreamer1.0-dev.
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # Restore ONLY (plain actions/cache, not Swatinem/rust-cache): the seed
+      # is written on main by this repo's own warm-cache job if one exists;
+      # the version-bump commit that precedes every tag changes Cargo.lock —
+      # rust-cache matches keys EXACTLY (no restore-keys by design), so a tag
+      # build would miss the seed every single time. The prefix fallback below
+      # restores the newest main seed instead; cargo then rebuilds only what
+      # actually changed. No save step: a cache saved on a tag ref is
+      # unreadable by every other ref — pure quota waste.
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            senclaw/target
+          key: relcache-v1-${{ matrix.target }}-${{ hashFiles('senclaw/Cargo.lock') }}
+          restore-keys: relcache-v1-${{ matrix.target }}-
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      # Standalone crate (own lockfile, own target dir) so it builds in
+      # seconds and never inherits the daemon's dependency tree. On Windows it
+      # is a windowed no-console binary with a small progress window — the
+      # thing the desktop app hands the bundle swap to.
+      - name: Build update_desktop helper
+        shell: bash
+        run: cargo build --release --manifest-path desktop/update_desktop/Cargo.toml --target ${{ matrix.target }}
+
+      # The daemon links no inference code (runtime-protocol.md): GGUF, MLX,
+      # OCR, TTS, Whisper and Decision are all separate runtimes it installs
+      # and launches itself, so there is no feature matrix to pass here —
+      # unlike the old monorepo build, every platform builds identically.
+      - name: Build senclaw daemon binary
+        shell: bash
+        run: cargo build --release --bin senclaw --manifest-path senclaw/Cargo.toml --target ${{ matrix.target }}
+
+      - name: Resolve release version
+        id: ver
+        shell: bash
+        run: |
+          # The git tag is the single source of version identity:
+          #   tag v0.3.0 → Cargo version 0.3.0 → SENCLAW_VERSION 0.3.0
+          # A workflow_dispatch build has no tag, so it stays 'dev', which
+          # disables the in-app updater (app_config.dart::kIsDevBuild) — a
+          # non-release build must never offer to overwrite itself.
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            VER="${GITHUB_REF_NAME#v}"
+          else
+            VER="dev"
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          # --build-name feeds CFBundleShortVersionString / the Windows file
+          # version and must be a bare x.y.z: 'dev' is rejected, and so is a
+          # prerelease suffix (0.3.0-beta.1 → 0.3.0). SENCLAW_VERSION above
+          # keeps the full string — that is what the updater compares.
+          case "$VER" in
+            dev) echo "build_name=0.0.0" >> "$GITHUB_OUTPUT" ;;
+            *)   echo "build_name=${VER%%-*}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Build Flutter desktop app
+        working-directory: desktop
+        run: |
+          flutter pub get
+          # Single line on purpose: this step has no `shell:`, so Windows runs
+          # it under pwsh, where a trailing `\` is not a line continuation.
+          flutter build ${{ matrix.platform }} --release --build-name="${{ steps.ver.outputs.build_name }}" --dart-define=SENCLAW_VERSION="${{ steps.ver.outputs.version }}" --dart-define=SENCLAW_TARGET="${{ matrix.target }}"
+
+      - name: Bundle daemon + collect artifacts
+        shell: bash
+        run: |
+          mkdir -p dist-artifacts
+          BIN_DIR="senclaw/target/${{ matrix.target }}/release"
+          UPD_DIR="desktop/update_desktop/target/${{ matrix.target }}/release"
+          case "${{ matrix.platform }}" in
+            macos)
+              APP="desktop/build/macos/Build/Products/Release/SenClaw Desktop.app"
+              cp "$BIN_DIR/senclaw" "$APP/Contents/Resources/senclaw"
+              cp "$UPD_DIR/update_desktop" "$APP/Contents/Resources/update_desktop"
+              # zip the .app for upload
+              ditto -c -k --keepParent "$APP" "dist-artifacts/SenClaw-${{ matrix.target }}.app.zip"
+              cp "$BIN_DIR/senclaw" "dist-artifacts/senclaw-${{ matrix.target }}"
+              ;;
+            windows)
+              REL="desktop/build/windows/x64/runner/Release"
+              cp "$BIN_DIR/senclaw.exe" "$REL/senclaw.exe"
+              cp "$UPD_DIR/update_desktop.exe" "$REL/update_desktop.exe"
+              powershell -Command "Compress-Archive -Path '$REL/*' -DestinationPath 'dist-artifacts/SenClaw-${{ matrix.target }}.zip'"
+              cp "$BIN_DIR/senclaw.exe" "dist-artifacts/senclaw-${{ matrix.target }}.exe"
+              ;;
+            linux)
+              REL="desktop/build/linux/x64/release/bundle"
+              cp "$BIN_DIR/senclaw" "$REL/senclaw"
+              cp "$UPD_DIR/update_desktop" "$REL/update_desktop"
+              tar -C "$REL" -czf "dist-artifacts/SenClaw-${{ matrix.target }}.tar.gz" .
+              cp "$BIN_DIR/senclaw" "dist-artifacts/senclaw-${{ matrix.target }}"
+              ;;
+          esac
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: senclaw-${{ matrix.target }}
+          if-no-files-found: ignore
+          path: dist-artifacts/
+
+  # ── Web UI dist bundle — downloaded on demand by `senclaw web` ──────────────
+  # Builds the REACT web-app (a sibling repo), not the Flutter web target
+  # above (`make app-build-web`) — these are two unrelated "web" builds that
+  # happened to share a name in the old monorepo.
+  web:
+    name: Build web-app dist
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/web-app
+          token: ${{ env.CHECKOUT_TOKEN }}
+          path: web-app
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build web-app
+        working-directory: web-app
+        run: |
+          npm install
+          npm run build
+
+      - name: Pack dist
+        run: |
+          mkdir -p dist-artifacts
+          tar -C web-app/dist -czf dist-artifacts/senclaw-web-dist.tar.gz .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: senclaw-web-dist
+          path: dist-artifacts/
+
+  # ── Create GitHub Release and attach artifacts ───────────────────────────────
+  release:
+    name: Create release
+    needs: [build, web]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history + tags: the manifest step derives its changelog from
+          # `git log <prev-tag>..<tag>`, which needs more than a shallow clone.
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lh release-artifacts/
+
+      # Update manifest consumed by the desktop app's updater. It is fetched as
+      # a release ASSET (releases/latest/download/latest.json) rather than via
+      # the GitHub API, which rate-limits at 60 req/h per IP — every machine
+      # behind one office NAT shares that budget. `latest/download/` redirects
+      # to the newest NON-prerelease, so the stable channel falls out for free
+      # and `v*-beta.*` manifests are simply never resolved.
+      - name: Generate update manifest
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VER="${TAG#v}"
+
+          # In-app changelog. `generate_release_notes` below fills the web page;
+          # this feeds the app's Updates panel, which cannot call the API.
+          PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          if [ -n "$PREV" ]; then
+            NOTES=$(git log --pretty=format:'- %s' "${PREV}..${TAG}")
+          else
+            NOTES="- Initial release"
+          fi
+
+          # Derive the asset map from what actually built — never hard-code the
+          # target list, or re-enabling a matrix entry (e.g. Intel macOS) would
+          # strand those users on an old version with no update ever offered.
+          # Suffix strip order matters: .app.zip before .zip.
+          ASSETS='{}'
+          for f in release-artifacts/SenClaw-*; do
+            [ -f "$f" ] || continue
+            base=$(basename "$f")
+            triple="${base#SenClaw-}"
+            triple="${triple%.app.zip}"
+            triple="${triple%.tar.gz}"
+            triple="${triple%.zip}"
+            ASSETS=$(jq --arg t "$triple" --arg n "$base" \
+                        --argjson s "$(stat -c%s "$f")" \
+                        --arg h "$(sha256sum "$f" | cut -d' ' -f1)" \
+                        '.[$t] = {name: $n, size: $s, sha256: $h}' <<<"$ASSETS")
+          done
+
+          if [ "$(jq 'length' <<<"$ASSETS")" -eq 0 ]; then
+            echo "::error::no SenClaw-* bundles in release-artifacts/ — refusing to publish an empty manifest"
+            exit 1
+          fi
+
+          # jq builds the JSON so arbitrary commit subjects in $NOTES cannot
+          # break escaping.
+          jq -n --arg v "$VER" \
+                --arg p "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                --arg n "$NOTES" \
+                --arg m "0.0.0" \
+                --argjson a "$ASSETS" \
+                '{version: $v, publishedAt: $p, notes: $n, minVersion: $m, assets: $a}' \
+                > release-artifacts/latest.json
+          cat release-artifacts/latest.json
+
+          # Release-page body. `generate_release_notes` only fills a release
+          # softprops CREATES — when a sibling workflow (hub/extension)
+          # uploads its asset first, the release already exists with an empty
+          # body and would stay empty. An explicit body_path is applied on
+          # update as well, so the changelog survives whichever job wins the
+          # race. NOT under release-artifacts/: everything there is uploaded
+          # as an asset.
+          {
+            echo "$NOTES"
+            if [ -n "$PREV" ]; then
+              echo
+              echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...${TAG}"
+            fi
+          } > RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: SenClaw Desktop ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          # On create, GitHub appends the auto-generated section after the
+          # body; on update only body_path applies (see RELEASE_NOTES.md note).
+          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
+          files: release-artifacts/*

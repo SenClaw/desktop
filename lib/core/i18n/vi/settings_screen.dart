@@ -1,0 +1,667 @@
+/// Vietnamese strings for this area. English string = key. Filled by the
+/// localization sweep; keep entries sorted roughly by screen order.
+const Map<String, String> viSettingsScreen = {
+  // Appearance
+  'System follows your OS appearance setting and switches automatically.':
+      'Hệ thống bám theo cài đặt giao diện của hệ điều hành và tự chuyển đổi.',
+  'Applies everywhere immediately. System follows your OS language (Vietnamese → Tiếng Việt, otherwise English).':
+      'Áp dụng ngay trên toàn ứng dụng. Hệ thống bám theo ngôn ngữ hệ điều hành (tiếng Việt → Tiếng Việt, còn lại → English).',
+
+  // General → Network access (daemon bind host)
+  'Network access': 'Truy cập mạng',
+  'Who can reach this daemon. Private keeps it on this machine; '
+          'Public lets phones and other computers on your network use it.':
+      'Ai được kết nối tới daemon này. Riêng tư thì chỉ máy này dùng được; '
+          'Công khai thì điện thoại và máy khác trong mạng cũng dùng được.',
+  // ('Private' → 'Riêng tư' is already keyed below, under Telegram chat types.)
+  'Public': 'Công khai',
+  'Anyone on your network can reach SenClaw. The daemon '
+          'requires the API token from every non-local device — it is '
+          'in ~/.senclaw/api_token on this machine.':
+      'Mọi thiết bị trong mạng đều tới được SenClaw. Daemon sẽ bắt buộc '
+          'token API với mọi thiết bị không phải máy này — token nằm ở '
+          '~/.senclaw/api_token trên máy này.',
+  'The running daemon still uses the previous setting. Restart it to apply.':
+      'Daemon đang chạy vẫn dùng thiết lập cũ. Khởi động lại để áp dụng.',
+
+  // Space Apps → App access token (per-app isolation switch)
+  'App access token': 'Token truy cập của app',
+  'Every installed app gets its own secret, and the daemon treats it '
+          'as the app’s name. This decides what happens to a call that '
+          'arrives without one. A token that IS present is always checked '
+          'and always scoped to its own app.':
+      'Mỗi app đã cài có một bí mật riêng, và daemon coi đó là tên của app. '
+          'Mục này quyết định điều gì xảy ra với lời gọi KHÔNG kèm token. '
+          'Còn token có kèm thì luôn được kiểm và luôn bị giới hạn trong '
+          'đúng app của nó.',
+  'Require': 'Bắt buộc',
+  'Warn only': 'Chỉ cảnh báo',
+  'Off': 'Tắt',
+  'In force now — no daemon restart needed.':
+      'Có hiệu lực ngay — không cần khởi động lại daemon.',
+  'App isolation is off. Any process on this machine can read '
+          'any app’s settings and query its database just by naming the '
+          'app’s id, which is public. Leave this on Off only for an app '
+          'that genuinely cannot send the token.':
+      'Cách ly giữa các app đang tắt. Mọi tiến trình trên máy này đọc được '
+          'settings và truy vấn được database của bất kỳ app nào, chỉ cần biết '
+          'id của app — mà id là công khai. Chỉ để Tắt khi có app thật sự '
+          'không gửi token được.',
+  'Everything is served, but each app calling without a token is '
+          'logged once — this is how you find out what would break before '
+          'requiring it.':
+      'Mọi thứ vẫn chạy, nhưng mỗi app gọi mà thiếu token sẽ được ghi log một '
+          'lần — đây là cách biết app nào sẽ gãy trước khi bật Bắt buộc.',
+  'Apps built on a SenClaw SDK send the token on their own, and '
+          'the daemon stamps it on everything it proxies. An app using its '
+          'own HTTP client gets 401 until it sends '
+          'SENCLAW_TOKEN_ACCESS_APP — switch to Warn only for a while to '
+          'see which ones those are.':
+      'App viết bằng SDK của SenClaw tự gửi token, và daemon tự đóng dấu lên '
+          'mọi thứ nó chuyển tiếp. App tự dựng HTTP client riêng sẽ nhận 401 '
+          'cho tới khi gửi SENCLAW_TOKEN_ACCESS_APP — chuyển sang Chỉ cảnh báo '
+          'một thời gian để biết đó là những app nào.',
+  'This overrides SENCLAW_APP_TOKEN_MODE=':
+      'Thiết lập này đè lên SENCLAW_APP_TOKEN_MODE=',
+  ' from the daemon’s environment.': ' trong môi trường của daemon.',
+  'This daemon was started outside the app, so it keeps '
+          'its own setting until it is restarted here.':
+      'Daemon này được khởi động từ bên ngoài ứng dụng nên vẫn giữ thiết lập '
+          'riêng của nó cho tới khi được khởi động lại ở đây.',
+  'Restart daemon': 'Khởi động lại daemon',
+  'Daemon restarted with the new setting.':
+      'Đã khởi động lại daemon với thiết lập mới.',
+
+  // Sidebar sections
+  'Channels': 'Kênh',
+  'Profiles': 'Hồ sơ',
+  'Tool Rules': 'Luật công cụ',
+  'LLM Models': 'Model LLM',
+  'Provider Sign-in': 'Đăng nhập nhà cung cấp',
+  'Local Models': 'Model cục bộ',
+  'Embedding': 'Embedding',
+  'Knowledge': 'Tri thức',
+  'Speech-to-Text': 'Giọng nói thành chữ',
+  'Text-to-Speech': 'Chữ thành giọng nói',
+  'OCR': 'OCR',
+  'Updates': 'Cập nhật',
+  'Speech-to-Text (Whisper)': 'Giọng nói thành chữ (Whisper)',
+
+  // Updates
+  'Development build': 'Bản build dev',
+  'Version {v}': 'Phiên bản {v}',
+  'Installed at {path}': 'Cài tại {path}',
+  'The web console is served by the daemon and updates with it. '
+          'Update the daemon on the host machine: senclaw update':
+      'Bảng điều khiển web do daemon phục vụ và cập nhật cùng daemon. '
+          'Hãy cập nhật daemon trên máy chủ: senclaw update',
+  'This build has no release version, so it cannot be updated in place. '
+          'Rebuild from source, or install a release with: senclaw install desktop':
+      'Bản build này không có số phiên bản phát hành nên không thể cập nhật tại chỗ. '
+          'Hãy build lại từ mã nguồn, hoặc cài bản phát hành bằng: senclaw install desktop',
+  'Check for updates automatically': 'Tự động kiểm tra cập nhật',
+  'Once a day, in the background. Nothing installs without your say-so.':
+      'Mỗi ngày một lần, chạy nền. Không tự cài gì khi bạn chưa đồng ý.',
+  'At every start and once a day after that, in the background. A new version '
+          'pops up a notice; nothing installs without your say-so.':
+      'Mỗi lần khởi động và sau đó mỗi ngày một lần, chạy nền. Có bản mới sẽ '
+          'hiện thông báo; không tự cài gì khi bạn chưa đồng ý.',
+  'You asked not to be notified about {v}.':
+      'Bạn đã chọn không nhận thông báo về {v}.',
+  'Reminders about {v} are paused until {when}.':
+      'Tạm ngưng nhắc về {v} — sẽ nhắc lại {when}.',
+  'Notify me again': 'Thông báo lại',
+  'later': 'sau',
+  'the next check': 'lần kiểm tra tới',
+  'in {n}m': 'sau {n} phút',
+  'in {n}h': 'sau {n} giờ',
+  'in {n}d': 'sau {n} ngày',
+  "What's new in {v}": 'Có gì mới ở {v}',
+  'You are on the latest version.': 'Bạn đang dùng phiên bản mới nhất.',
+  'Version {v} is available.': 'Đã có phiên bản {v}.',
+  'Downloading {v}…': 'Đang tải {v}…',
+  'Version {v} is ready to install.': 'Phiên bản {v} đã sẵn sàng để cài.',
+  'Installing — SenClaw will restart…': 'Đang cài — SenClaw sẽ khởi động lại…',
+  'Something went wrong.': 'Đã có lỗi xảy ra.',
+  'Not checked yet.': 'Chưa kiểm tra lần nào.',
+  'Last checked {ago}.': 'Kiểm tra lần cuối {ago}.',
+  '{n}m ago': '{n} phút trước',
+  '{n}h ago': '{n} giờ trước',
+  '{n}d ago': '{n} ngày trước',
+  'Install & Restart': 'Cài & khởi động lại',
+  'Check now': 'Kiểm tra ngay',
+  'Install update?': 'Cài bản cập nhật?',
+  'SenClaw will quit, install the update, and reopen. '
+          'Running agents and background tasks will be stopped.':
+      'SenClaw sẽ thoát, cài bản cập nhật rồi mở lại. '
+          'Các agent đang chạy và tác vụ nền sẽ bị dừng.',
+
+  // General — connection
+  'Connection': 'Kết nối',
+  'API access token — needed when the daemon asks for one (see '
+          'Network access above). Leave it empty for a daemon on this '
+          'machine: the app reads ~/.senclaw/api_token itself.':
+      'Token truy cập API — cần khi daemon có đòi (xem Truy cập mạng ở trên). '
+          'Để trống nếu daemon nằm trên máy này: app tự đọc '
+          '~/.senclaw/api_token.',
+
+  // General — network access → the daemon's own auth gate
+  'Who has to prove they are allowed in before SenClaw answers. The '
+          'token lives on the machine running SenClaw.':
+      'Ai phải chứng minh được phép trước khi SenClaw trả lời. Token nằm trên '
+          'máy đang chạy SenClaw.',
+  'Automatic': 'Tự động',
+  'Always require': 'Luôn bắt buộc',
+  'Never': 'Không bao giờ',
+  'Ask for the token only when SenClaw is reachable beyond this '
+          'machine, and only from other devices. Right for a laptop or a '
+          'desktop install.':
+      'Chỉ đòi token khi SenClaw mở ra ngoài máy này, và chỉ đòi ở thiết bị '
+          'khác. Hợp cho laptop hoặc bản cài desktop.',
+  'Running behind a reverse proxy? If nginx, Caddy or a load '
+          'balancer terminates HTTPS on the same machine, every visitor '
+          'arrives looking local and Automatic lets them all in without '
+          'a token. Choose Always require for that setup.':
+      'Có đang chạy sau reverse proxy? Nếu nginx, Caddy hay load balancer kết '
+          'thúc HTTPS ngay trên máy này thì mọi khách đều hiện ra như máy nội '
+          'bộ, và Tự động sẽ cho vào hết mà không đòi token. Kiểu triển khai '
+          'đó phải chọn Luôn bắt buộc.',
+  'Every request needs the token, including ones that look local. '
+          'This is the setting for a cloud or Docker deployment.':
+      'Mọi yêu cầu đều cần token, kể cả yêu cầu trông như nội bộ. Đây là thiết '
+          'lập cho triển khai cloud hoặc Docker.',
+  'No token is being asked for. Only this machine can reach '
+          'SenClaw right now, but changing the bind host above would '
+          'not turn the gate back on.':
+      'Không đòi token. Hiện chỉ máy này tới được SenClaw, nhưng đổi bind host '
+          'ở trên cũng không bật lại cổng kiểm soát.',
+  'No token is being asked for and SenClaw is reachable '
+          'beyond this machine — it is answering everyone. Turn this '
+          'back on unless something in front of it already '
+          'authenticates every request.':
+      'Không đòi token trong khi SenClaw mở ra ngoài máy này — nó đang trả lời '
+          'tất cả mọi người. Hãy bật lại, trừ khi đã có lớp phía trước xác thực '
+          'mọi yêu cầu.',
+  'This overrides SENCLAW_AUTH_MODE=': 'Thiết lập này đè lên SENCLAW_AUTH_MODE=',
+  'Empty for the local daemon': 'Để trống nếu dùng daemon cục bộ',
+  'API token saved — applies to new requests.':
+      'Đã lưu token API — áp dụng cho các yêu cầu mới.',
+
+  // General — permissions & behavior
+  'Permissions': 'Quyền',
+  'Skip all-agent permissions': 'Bỏ qua hỏi quyền cho mọi agent',
+  'Auto-accept tool calls for every agent.':
+      'Tự động chấp nhận lệnh gọi công cụ cho mọi agent.',
+  'Skip main-agent permissions': 'Bỏ qua hỏi quyền cho agent chính',
+  'Auto-accept tool calls for the main agent only.':
+      'Chỉ tự động chấp nhận lệnh gọi công cụ cho agent chính.',
+  'Agent behavior': 'Hành vi agent',
+  'After-process hook': 'Hook sau xử lý',
+  'Run the post-processing step after each turn.':
+      'Chạy bước hậu xử lý sau mỗi lượt.',
+  'Pre-cognitive recall': 'Gợi nhớ trước khi xử lý',
+  'Inject relevant memories before processing.':
+      'Chèn các bộ nhớ liên quan trước khi xử lý.',
+  'Memory recall': 'Gợi nhớ bộ nhớ',
+  'Consolidate dropped history into memory files and '
+          'inject relevant saved memories into each request.':
+      'Cô đọng phần lịch sử bị cắt vào các tệp bộ nhớ và chèn những bộ nhớ '
+          'liên quan đã lưu vào mỗi yêu cầu.',
+  'Pre-trigger skill': 'Skill kích hoạt trước',
+  'Evaluate trigger skills before the main turn.':
+      'Đánh giá các skill kích hoạt trước lượt chính.',
+  'Autonomous tasks': 'Tác vụ tự động',
+  'Auto-run Kanban tasks (dispatcher)': 'Tự chạy tác vụ Kanban (dispatcher)',
+  'Automatically assign a worker agent to each task in a '
+          'Kanban board\'s Ready column, run it, and complete or block '
+          'it. Agents act unattended — leave OFF unless you want that.':
+      'Tự gán một agent thợ cho mỗi tác vụ ở cột Ready của bảng Kanban, chạy '
+          'rồi hoàn thành hoặc chặn tác vụ đó. Agent hành động không giám sát — '
+          'hãy để TẮT trừ khi bạn thực sự muốn vậy.',
+
+  // General — screen capture
+  'Screen capture': 'Chụp màn hình',
+  'Capture shortcut': 'Phím tắt chụp',
+  'Press this anywhere to grab a region — the same selector as '
+          'macOS Cmd+Shift+4. Needs at least one modifier.':
+      'Bấm ở bất cứ đâu để chọn vùng chụp — cùng bộ chọn với Cmd+Shift+4 của '
+          'macOS. Cần ít nhất một phím bổ trợ.',
+  'Press the shortcut…': 'Bấm tổ hợp…',
+  'Reset to default (⌃ ⇧ 4)': 'Về mặc định (⌃ ⇧ 4)',
+
+  // Channels — pairing
+  'Pairing — chats waiting to connect': 'Pairing — chat đang chờ kết nối',
+  'An unknown chat that messages the bot gets an 8-character code and is not answered further until you approve it here. Codes expire after 1 hour.':
+      'Chat lạ nhắn cho bot sẽ nhận mã 8 ký tự và không được xử lý gì thêm '
+          'cho tới khi bạn duyệt ở đây. Mã hết hạn sau 1 giờ.',
+  'Paste the code they sent you': 'Dán mã người dùng gửi cho bạn',
+  'Approve code': 'Duyệt mã',
+  'No chats waiting.': 'Không có chat nào đang chờ.',
+  'Some codes expired — ask the user to message the bot again for a new one.':
+      'Có mã đã hết hạn — bảo người dùng nhắn lại cho bot để lấy mã mới.',
+  '(unknown name)': '(không rõ tên)',
+  'Approve this chat?': 'Duyệt chat này?',
+  'This is a group. Approving lets every member of that group use the agent.':
+      'Đây là group. Duyệt nghĩa là mọi thành viên trong group đều dùng được agent.',
+  'Approve': 'Duyệt',
+  'Approved': 'Đã duyệt',
+  'Reject': 'Từ chối',
+  'Rejected': 'Đã từ chối',
+
+  // Channels
+  'Add channel': 'Thêm kênh',
+  'No channels connected.': 'Chưa có kênh nào được kết nối.',
+  'Edit channel': 'Sửa kênh',
+  'Rename or reconfigure this channel': 'Đổi tên hoặc cấu hình lại kênh này',
+  'Connect a messaging platform to your agent':
+      'Kết nối một nền tảng nhắn tin với agent của bạn',
+  'Connector': 'Bộ kết nối',
+  'PLATFORM': 'NỀN TẢNG',
+  'NAME': 'TÊN',
+  'My Telegram bot': 'Bot Telegram của tôi',
+  'BOT TOKEN': 'BOT TOKEN',
+  'Leave empty to use the .env default bot':
+      'Để trống để dùng bot mặc định trong .env',
+  'CHAT TYPE': 'LOẠI CHAT',
+  'Group': 'Nhóm',
+  'Private': 'Riêng tư',
+  'HUB URL': 'HUB URL',
+  'Registers with the hub, then shows a QR code for the '
+          'Senclaw mobile app to scan.':
+      'Đăng ký với hub, sau đó hiện mã QR để app Senclaw trên điện thoại quét.',
+  'Show pairing QR': 'Hiện mã QR ghép nối',
+  'APP ID': 'APP ID',
+  'APP SECRET': 'APP SECRET',
+  'Sandbox': 'Sandbox',
+  'Require @mention to trigger': 'Phải @nhắc tên mới trả lời',
+  'Only reply when the bot is explicitly mentioned':
+      'Chỉ trả lời khi bot được nhắc tên rõ ràng',
+  'Registering…': 'Đang đăng ký…',
+  'Register & Get QR': 'Đăng ký & lấy QR',
+  'Pairing failed: {e}': 'Ghép nối thất bại: {e}',
+  'Scan to connect': 'Quét để kết nối',
+  'Open the Senclaw mobile app and scan this code to pair.':
+      'Mở app Senclaw trên điện thoại và quét mã này để ghép nối.',
+  'Pairing link copied': 'Đã sao chép liên kết ghép nối',
+  'Copy pairing link': 'Sao chép liên kết ghép nối',
+
+  // Profiles (agents)
+  'New profile': 'Hồ sơ mới',
+  'No agent profiles.': 'Chưa có hồ sơ agent nào.',
+  'folder: {folder}': 'thư mục: {folder}',
+  '{n} channel': '{n} kênh',
+  '{n} channels': '{n} kênh',
+  'Edit agent · {folder}': 'Sửa agent · {folder}',
+  'My assistant': 'Trợ lý của tôi',
+  'Global default': 'Mặc định toàn cục',
+  '{id} (current)': '{id} (hiện tại)',
+  'BOUND CHANNELS': 'KÊNH ĐÃ LIÊN KẾT',
+  'No channels — add one in the Channels tab.':
+      'Chưa có kênh nào — thêm ở mục Kênh.',
+  'MEMORY.md (agent long-term memory)…':
+      'MEMORY.md (bộ nhớ dài hạn của agent)…',
+  'Core prompt (SOUL.md)…': 'Prompt cốt lõi (SOUL.md)…',
+  'Already bound to another profile': 'Đã liên kết với hồ sơ khác',
+
+  // Tool rules
+  'Dangerously accept all': 'Chấp nhận tất cả (nguy hiểm)',
+  'Auto-accept every tool call without prompting.':
+      'Tự động chấp nhận mọi lệnh gọi công cụ mà không hỏi.',
+  'Auto-accept rules': 'Luật tự động chấp nhận',
+  'Add rule': 'Thêm luật',
+  'No rules. Tool calls follow per-agent defaults.':
+      'Chưa có luật nào. Lệnh gọi công cụ theo mặc định của từng agent.',
+  'Add tool rule': 'Thêm luật công cụ',
+  'ACTION': 'HÀNH ĐỘNG',
+  'Auto accept': 'Tự chấp nhận',
+  'Accept + remember': 'Chấp nhận + ghi nhớ',
+  'Always ask': 'Luôn hỏi',
+  'Auto deny': 'Tự từ chối',
+  'MATCH': 'ĐIỀU KIỆN KHỚP',
+  'Bash glob': 'Bash glob',
+  'Bash regex': 'Bash regex',
+  'Tool name': 'Tên công cụ',
+  'Skill name': 'Tên skill',
+  'MCP glob': 'MCP glob',
+  'MCP server': 'MCP server',
+  'Tool category': 'Nhóm công cụ',
+  'All tools': 'Mọi công cụ',
+  'PATTERN': 'MẪU',
+  'TOOL NAME': 'TÊN CÔNG CỤ',
+  'SKILL NAME': 'TÊN SKILL',
+  'MCP SERVER': 'MCP SERVER',
+  'TOOL (optional — blank = all)': 'CÔNG CỤ (tuỳ chọn — để trống = tất cả)',
+  'CATEGORY': 'NHÓM',
+  'DESCRIPTION (optional)': 'MÔ TẢ (tuỳ chọn)',
+  'Why this rule exists': 'Lý do có luật này',
+
+  // LLM models
+  'Extended thinking': 'Suy nghĩ mở rộng',
+  'Let the model reason before replying':
+      'Cho model suy luận trước khi trả lời',
+  'Add endpoint': 'Thêm endpoint',
+  'Main': 'Chính',
+  'Cognitive': 'Tri thức',
+  'Quick': 'Nhanh',
+  'Set role': 'Đặt vai trò',
+  'Set as Main': 'Đặt làm model chính',
+  'Set as Cognitive': 'Đặt làm model tri thức',
+  'Set as Quick': 'Đặt làm model nhanh',
+  'Set as…': 'Đặt làm…',
+  'Delete endpoint?': 'Xoá endpoint?',
+  '"{label}" will be removed. Chats '
+          'using it fall back to the active '
+          'default model.':
+      '"{label}" sẽ bị gỡ. Các cuộc trò chuyện đang dùng nó sẽ quay về model '
+          'mặc định đang bật.',
+  'Edit LLM endpoint': 'Sửa endpoint LLM',
+  'Add LLM endpoint': 'Thêm endpoint LLM',
+  'Provider': 'Nhà cung cấp',
+  'Custom LLM endpoint': 'Endpoint LLM tuỳ chỉnh',
+  'Base URL': 'Base URL',
+  'API key': 'API key',
+  'Stored key — edit to replace': 'Key đã lưu — sửa để thay thế',
+  'Your Anthropic API key': 'API key Anthropic của bạn',
+  'Your OpenAI API key': 'API key OpenAI của bạn',
+  'Your Moonshot API key': 'API key Moonshot của bạn',
+  'Your MiniMax API key': 'API key MiniMax của bạn',
+  'Your DeepSeek API key': 'API key DeepSeek của bạn',
+  'Your Zhipu API key': 'API key Zhipu của bạn',
+  'Your OpenRouter API key': 'API key OpenRouter của bạn',
+  'Your Alibaba Cloud API key': 'API key Alibaba Cloud của bạn',
+  'Your API key': 'API key của bạn',
+  'API type (compatibility)': 'Loại API (tương thích)',
+  'OpenAI-compatible': 'Tương thích OpenAI',
+  'Anthropic-compatible': 'Tương thích Anthropic',
+  'Model name': 'Tên model',
+  'Fetch': 'Lấy danh sách',
+  'Available models': 'Model khả dụng',
+  'Vision (image input)': 'Vision (nhận ảnh)',
+  'Auto (infer from model name)': 'Tự động (suy ra từ tên model)',
+  'Supported': 'Có hỗ trợ',
+  'Not supported': 'Không hỗ trợ',
+  'Edit format': 'Định dạng Edit',
+  'exact (default)': 'exact (mặc định)',
+  'fuzzy': 'fuzzy',
+  'udiff': 'udiff',
+  'whole': 'whole',
+  'How the Edit tool matches what this model sends: exact for large models; fuzzy or udiff for small local models.':
+      'Cách công cụ Edit khớp nội dung model này gửi về: exact cho model lớn; fuzzy hoặc udiff cho model local nhỏ.',
+  'Test': 'Kiểm tra',
+  '✓ Loaded {n} model(s)': '✓ Đã nạp {n} model',
+  'No models': 'Không có model nào',
+  '✓ Connection OK': '✓ Kết nối OK',
+  '✗ Model name is required': '✗ Bắt buộc nhập tên model',
+
+  // Local models
+  'Platform: {platform} — local MLX inference only runs '
+          'on macOS (Apple Silicon).':
+      'Nền tảng: {platform} — suy luận MLX cục bộ chỉ chạy trên macOS '
+          '(Apple Silicon).',
+  'Downloading': 'Đang tải về',
+  'Downloading {pct}%': 'Đang tải về {pct}%',
+  'Use as LLM': 'Dùng làm LLM',
+  'Load': 'Nạp',
+  'Unload': 'Gỡ khỏi bộ nhớ',
+  'Already in LLM Models: {label}': 'Đã có trong Model LLM: {label}',
+  'Added as LLM profile and set active: {label}':
+      'Đã thêm làm hồ sơ LLM và đặt đang dùng: {label}',
+  'Added as LLM profile: {label}': 'Đã thêm làm hồ sơ LLM: {label}',
+  'Failed to add as LLM: {e}': 'Thêm làm LLM thất bại: {e}',
+  'Removed {label}': 'Đã gỡ {label}',
+  'Delete failed: {e}': 'Xoá thất bại: {e}',
+
+  // Local inference settings
+  'Inference settings': 'Cài đặt suy luận',
+  'Inference backend': 'Backend suy luận',
+  'Engine for Load / Use as LLM. MLX is Apple-Silicon-only & fastest.':
+      'Engine cho Nạp / Dùng làm LLM. MLX chỉ chạy trên Apple Silicon và nhanh nhất.',
+  'Auto': 'Tự động',
+  'MLX native (~60–100 tok/s)': 'MLX gốc (~60–100 tok/s)',
+  'Candle (~12 tok/s)': 'Candle (~12 tok/s)',
+  'Idle unload (secs)': 'Gỡ khi rảnh (giây)',
+  '0 = never; ≥60 to free RAM after inactivity. Default 60.':
+      '0 = không bao giờ; ≥60 để giải phóng RAM sau khi không dùng. Mặc định 60.',
+  'KV TurboQuant bits': 'Số bit KV TurboQuant',
+  'Quantize KV cache to save RAM on long generation.':
+      'Lượng tử hoá KV cache để tiết kiệm RAM khi sinh văn bản dài.',
+  'Auto (4-bit for 4-bit models)': 'Tự động (4-bit cho model 4-bit)',
+  'TQ4 — 4-bit total': 'TQ4 — tổng 4-bit',
+  'TQ3 — 3-bit total': 'TQ3 — tổng 3-bit',
+  'Off — FP16': 'Tắt — FP16',
+  'MLX packed KV (Metal)': 'KV nén MLX (Metal)',
+  'MLX-native GPU KV quantization. Reload the model after changing.':
+      'Lượng tử hoá KV trên GPU theo chuẩn MLX. Hãy nạp lại model sau khi đổi.',
+  '4-bit packed': 'Nén 4-bit',
+  '8-bit packed': 'Nén 8-bit',
+  'TQ activate after (tokens)': 'Bật TQ sau (token)',
+  'Cached tokens before TurboQuant kicks in. Default 16384.':
+      'Số token đã cache trước khi TurboQuant bật. Mặc định 16384.',
+  'Max prompt tokens': 'Token prompt tối đa',
+  'Hard cap on prompt length (512–262144). Default 128000.':
+      'Giới hạn cứng độ dài prompt (512–262144). Mặc định 128000.',
+  'Max new tokens': 'Token sinh mới tối đa',
+  'Max tokens generated per request (1–8192). Default 8192.':
+      'Số token sinh tối đa mỗi yêu cầu (1–8192). Mặc định 8192.',
+  'Max KV tokens': 'Token KV tối đa',
+  'KV-cache sliding window (128–262144). Default 16384.':
+      'Cửa sổ trượt của KV-cache (128–262144). Mặc định 16384.',
+  'Temperature (MLX)': 'Temperature (MLX)',
+  '0 = greedy. Empty = server default (Gemma ≈0.65).':
+      '0 = greedy. Để trống = mặc định của server (Gemma ≈0.65).',
+  'Repetition penalty (MLX)': 'Repetition penalty (MLX)',
+  '1 = off. Empty = server default (Gemma ≈1.15).':
+      '1 = tắt. Để trống = mặc định của server (Gemma ≈1.15).',
+  'Thinking mode (Qwen3)': 'Chế độ suy nghĩ (Qwen3)',
+  'Chain-of-thought before answering. Off is faster.':
+      'Suy luận từng bước trước khi trả lời. Tắt sẽ nhanh hơn.',
+  'Release cache after session (MLX)': 'Giải phóng cache sau phiên (MLX)',
+  'Drop per-session KV/prefix cache when a chat ends. Weights stay.':
+      'Bỏ KV/prefix cache của phiên khi kết thúc trò chuyện. Trọng số vẫn giữ.',
+  'Inference settings saved': 'Đã lưu cài đặt suy luận',
+  'Unloaded all models': 'Đã gỡ mọi model khỏi bộ nhớ',
+  'Unload all now': 'Gỡ tất cả ngay',
+
+  // Hugging Face add-model card
+  'Add model from Hugging Face': 'Thêm model từ Hugging Face',
+  'org/repo or URL (e.g. facebook/mms-tts-vie)':
+      'org/repo hoặc URL (vd: facebook/mms-tts-vie)',
+  'Check': 'Kiểm tra',
+  'Check failed: {e}': 'Kiểm tra thất bại: {e}',
+  'Download failed: {e}': 'Tải về thất bại: {e}',
+  'Download started — progress shows in the list below':
+      'Đã bắt đầu tải — tiến trình hiện ở danh sách bên dưới',
+  'Try anyway': 'Cứ thử',
+
+  // Embedding
+  'None (disabled)': 'Không (tắt)',
+  'Local (on-device)': 'Cục bộ (trên máy)',
+  'Model path (optional)': 'Đường dẫn model (tuỳ chọn)',
+  'Dimensions (optional)': 'Số chiều (tuỳ chọn)',
+  'Embedding config saved': 'Đã lưu cấu hình embedding',
+  'Save failed: {e}': 'Lưu thất bại: {e}',
+  'Local models': 'Model cục bộ',
+  'Installed': 'Đã cài',
+  'Downloading model…': 'Đang tải model…',
+
+  // Language servers (LSP)
+  'Language servers (LSP)': 'Language server (LSP)',
+  'After every Edit/Write the agent gets the file\'s real compiler/linter diagnostics from a language server already installed on this machine. Nothing is downloaded here.':
+      'Sau mỗi lần Edit/Write, agent nhận diagnostics (lỗi biên dịch/lint) thật '
+          'từ một language server đã cài sẵn trên máy này. Không tải gì cả.',
+  'Configuration': 'Cấu hình',
+  'Timeout (ms)': 'Timeout (ms)',
+  'Available language servers': 'Language server khả dụng',
+  'Nothing to report.': 'Không có gì để hiển thị.',
+  'Running': 'Đang chạy',
+  'No servers running.': 'Chưa có server nào chạy.',
+  'Disabled': 'Đã tắt',
+  'Per-language overrides': 'Ghi đè theo ngôn ngữ',
+  'Set a custom command/args for a language, overriding the daemon default. Args are separated by spaces.':
+      'Chỉ định command/args riêng cho một ngôn ngữ, ghi đè mặc định của '
+          'daemon. Args cách nhau bởi khoảng trắng.',
+  'No overrides.': 'Không có ghi đè nào.',
+  'Not installed': 'Chưa cài',
+  'not installed on this machine': 'chưa cài trên máy này',
+  'install rust-analyzer to enable': 'cài rust-analyzer để bật',
+  'install typescript-language-server to enable':
+      'cài typescript-language-server để bật',
+  'install pyright to enable': 'cài pyright để bật',
+  'install gopls to enable': 'cài gopls để bật',
+  'install the Dart SDK (dart language-server) to enable':
+      'cài Dart SDK (dart language-server) để bật',
+  'install clangd to enable': 'cài clangd để bật',
+  'alive': 'đang chạy',
+  'stopped': 'đã dừng',
+  'language (e.g. rust)': 'ngôn ngữ (vd. rust)',
+  'command (e.g. rust-analyzer)': 'command (vd. rust-analyzer)',
+  'args (space-separated)': 'args (cách nhau bởi dấu cách)',
+  'Timeout must be between 500 and 60000 ms':
+      'Timeout phải trong khoảng 500–60000 ms',
+  'Language server settings saved': 'Đã lưu cấu hình language server',
+
+  // Knowledge (cognitive)
+  'Knowledge (Cognitive)': 'Tri thức (Cognitive)',
+  'Enable cognitive layer': 'Bật lớp tri thức',
+  'Graph + Hebbian recall across sessions.':
+      'Đồ thị + gợi nhớ Hebbian xuyên suốt các phiên.',
+  'Auto-reflect on every user message': 'Tự chiêm nghiệm mỗi tin nhắn người dùng',
+  'Cognify each incoming message automatically.':
+      'Tự động trích tri thức từ mỗi tin nhắn đến.',
+  'Extraction': 'Trích xuất',
+  'Max concurrent extractions': 'Số lượt trích xuất song song tối đa',
+  'Semaphore size for in-flight cognify calls. Keep low on '
+          'local models.':
+      'Kích thước semaphore cho các lượt cognify đang chạy. Nên để thấp khi '
+          'dùng model cục bộ.',
+  'Max LLM output chars': 'Số ký tự output LLM tối đa',
+  'Hard cap on cognify-LLM output; streams abort past this.':
+      'Giới hạn cứng output của LLM cognify; vượt mức này sẽ ngắt luồng.',
+  'Reflection': 'Chiêm nghiệm',
+  'Min chars': 'Số ký tự tối thiểu',
+  'Skip reflection for messages shorter than this.':
+      'Bỏ qua chiêm nghiệm với tin nhắn ngắn hơn mức này.',
+  'Max chars': 'Số ký tự tối đa',
+  'Window size: buffered turns flush to one extraction '
+          'call when they reach this length.':
+      'Kích thước cửa sổ: các lượt đang gom sẽ dồn thành một lượt trích xuất '
+          'khi đạt độ dài này.',
+  'Cooldown (ms)': 'Thời gian chờ (ms)',
+  'Minimum gap between window flushes per agent.':
+      'Khoảng cách tối thiểu giữa hai lần dồn cửa sổ của mỗi agent.',
+  'Window idle (ms)': 'Cửa sổ rảnh (ms)',
+  'Flush the conversation window after this much chat '
+          'silence. 0 = flush per message.':
+      'Dồn cửa sổ hội thoại sau khoảng lặng này. 0 = dồn theo từng tin nhắn.',
+  'Maintenance': 'Bảo trì',
+  'Sweep interval (hours)': 'Chu kỳ quét dọn (giờ)',
+  'How often the background decay/prune sweep runs.':
+      'Tần suất chạy đợt quét suy giảm/cắt tỉa chạy nền.',
+  'Cognitive config saved': 'Đã lưu cấu hình tri thức',
+  'Maintenance started': 'Đã bắt đầu bảo trì',
+  'Run maintenance': 'Chạy bảo trì',
+
+  // Space Apps
+  'Register Space App': 'Đăng ký Space App',
+  'Manifest URL': 'URL manifest',
+  'Register': 'Đăng ký',
+  'Space App registered': 'Đã đăng ký Space App',
+  'Register failed: {e}': 'Đăng ký thất bại: {e}',
+  'File picker error: {e}': 'Lỗi hộp thoại chọn tệp: {e}',
+  'Space App installed': 'Đã cài Space App',
+  'Install failed: {e}': 'Cài đặt thất bại: {e}',
+  '{n} app has an update': '{n} app có bản mới',
+  '{n} apps have updates': '{n} app có bản mới',
+  'All apps are up to date': 'Mọi app đã ở phiên bản mới nhất',
+  'Updating…': 'Đang cập nhật…',
+  'Updated {id} → {v}': 'Đã cập nhật {id} → {v}',
+  '{id} is already up to date': '{id} đã ở bản mới nhất',
+  'Update failed: {e}': 'Cập nhật thất bại: {e}',
+  'Install, register, and remove embedded Space Apps.':
+      'Cài, đăng ký và gỡ các Space App nhúng.',
+  'Install ZIP': 'Cài từ ZIP',
+  'Register URL': 'Đăng ký bằng URL',
+  'Check updates': 'Kiểm tra cập nhật',
+  'No Space Apps installed': 'Chưa cài Space App nào',
+  'Uninstall': 'Gỡ cài đặt',
+  'Restart': 'Khởi động lại',
+  'Restarting…': 'Đang khởi động lại…',
+  'Restarted': 'Đã khởi động lại',
+  'Restart failed: {e}': 'Khởi động lại thất bại: {e}',
+  'Integration': 'Tích hợp',
+  '(imported disabled — enable in Plugins → Alias)':
+      '(nhập ở trạng thái tắt — bật trong Plugins → Alias)',
+  'No MCP declared': 'Không khai báo MCP',
+  'auto': 'tự động',
+  'Copy all logs': 'Sao chép toàn bộ nhật ký',
+  'Refresh logs': 'Làm mới nhật ký',
+  '(no logs)': '(chưa có nhật ký)',
+  'Log copied': 'Đã sao chép nhật ký',
+
+  // Media models (whisper / tts / ocr)
+  'Active model': 'Model đang dùng',
+  '(default)': '(mặc định)',
+  'Voice': 'Giọng đọc',
+  'Speed': 'Tốc độ',
+  'Test voice': 'Nghe thử giọng',
+  'Test (pick image)': 'Thử (chọn ảnh)',
+  'Stop & transcribe': 'Dừng & chuyển thành chữ',
+  'Record & transcribe': 'Ghi âm & chuyển thành chữ',
+  'Transcription': 'Kết quả nhận dạng',
+  '(no speech recognized)': '(không nhận ra lời nói nào)',
+  'Transcribe failed: {e}': 'Nhận dạng giọng nói thất bại: {e}',
+  'Microphone permission denied': 'Không có quyền truy cập micro',
+  'OCR result — {name}': 'Kết quả OCR — {name}',
+  '(no text recognized)': '(không nhận ra chữ nào)',
+  'OCR failed: {e}': 'OCR thất bại: {e}',
+  'Fallback voice used: {voice}': 'Đã dùng giọng dự phòng: {voice}',
+  'Spoke via {backend}': 'Đọc qua {backend}',
+  'Test failed: {e}': 'Kiểm tra thất bại: {e}',
+  'Speed must be 0.25–4.0': 'Tốc độ phải trong khoảng 0.25–4.0',
+  'Saved': 'Đã lưu',
+
+  // ── Settings → Your profile (Soul Core: USER.md / TOOLS.md / AGENTS.md) ──
+  'Your profile': 'Hồ sơ của bạn',
+  'What agents know about YOU — as opposed to a Profile\'s persona, '
+          'which is who the agent is. Shared by every agent profile.':
+      'Những gì agent biết về BẠN — khác với Persona của Profile, thứ mô tả '
+          'agent là ai. Dùng chung cho mọi profile agent.',
+  'Public fields go everywhere, including Telegram/Feishu group '
+          'chats. Private fields appear only in your own 1-1 conversations. '
+          'Email, address and phone default to private.':
+      'Trường công khai đi vào mọi ngữ cảnh, kể cả nhóm chat Telegram/Feishu. '
+          'Trường riêng tư chỉ hiện trong hội thoại 1-1 của chính bạn. '
+          'Email, địa chỉ và số điện thoại mặc định riêng tư.',
+  'Details': 'Thông tin',
+  'Full name': 'Họ tên',
+  'What to call you': 'Xưng hô',
+  'Pronouns': 'Đại từ',
+  'Language': 'Ngôn ngữ',
+  'Timezone': 'Múi giờ',
+  'Occupation': 'Nghề nghiệp',
+  'Location': 'Địa điểm',
+  'Phone': 'Điện thoại',
+  'Extra notes': 'Ghi chú thêm',
+  'Rules the agent learned': 'Quy tắc agent đã học',
+  'None yet. Tell the agent "from now on, keep replies short" and it '
+          'records the rule here.':
+      'Chưa có. Nói với agent "từ giờ trả lời ngắn gọn" và nó sẽ ghi quy tắc '
+          'vào đây.',
+  'What the agent actually receives': 'Agent thực sự nhận được gì',
+  'Private conversation': 'Hội thoại riêng tư',
+  'Group chat': 'Nhóm chat',
+  '(nothing)': '(không có gì)',
+  'Save profile': 'Lưu hồ sơ',
+  'Saved. Agents use it from the next chat session.':
+      'Đã lưu. Agent sẽ dùng từ phiên chat tiếp theo.',
+  'Local environment notes (TOOLS.md)': 'Ghi chú môi trường (TOOLS.md)',
+  'SSH hosts, device names, preferred TTS voices — kept out of skills '
+          'so skills stay shareable. Private conversations only.':
+      'Máy chủ SSH, tên thiết bị, giọng đọc TTS ưa dùng — để tách khỏi skill '
+          'thì skill vẫn chia sẻ được. Chỉ hiện trong hội thoại riêng tư.',
+  'Operating rules (AGENTS.md)': 'Quy tắc vận hành (AGENTS.md)',
+  'Rules applied in every session, appended to the system prompt. '
+          'SenClaw\'s built-in safety section always wins over anything here.':
+      'Quy tắc áp dụng cho mọi phiên, nối vào cuối system prompt. Phần Safety '
+          'mặc định của SenClaw luôn thắng nếu có mâu thuẫn.',
+};

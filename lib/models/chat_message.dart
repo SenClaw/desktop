@@ -1,0 +1,132 @@
+import 'dart:convert';
+
+/// Discriminated chat message. Mirrors the React union of text / tool /
+/// permission / question bubbles; the renderer branches on [kind].
+enum MessageKind { user, other, agent, tool, permission, question, form, widget, system }
+
+class ChatMessage {
+  final String id;
+  final MessageKind kind;
+  final String? text;
+  final String? sender;
+  final String? ts;
+
+  /// True while an agent reply is still streaming (built from `agent:delta`).
+  final bool streaming;
+
+  /// Output tokens this agent message cost (shown as a subtle badge).
+  final int? tokens;
+
+  /// Raw payload for non-text kinds (tool card, permission/question request).
+  final Map<String, dynamic> data;
+
+  const ChatMessage({
+    required this.id,
+    required this.kind,
+    this.text,
+    this.sender,
+    this.ts,
+    this.streaming = false,
+    this.tokens,
+    this.data = const {},
+  });
+
+  ChatMessage copyWith({
+    String? text,
+    bool? streaming,
+    Map<String, dynamic>? data,
+  }) => ChatMessage(
+    id: id,
+    kind: kind,
+    text: text ?? this.text,
+    sender: sender,
+    ts: ts,
+    streaming: streaming ?? this.streaming,
+    tokens: tokens,
+    data: data ?? this.data,
+  );
+
+  /// Image attachments ({dataUrl, mimeType}) on user/agent messages.
+  List<Map<String, dynamic>> get attachments =>
+      ((data['attachments'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .toList();
+
+  // ── Tool accessors ─────────────────────────────────────────────────────
+  String get toolName => '${data['toolName'] ?? ''}';
+  String get toolTitle => '${data['title'] ?? toolName}';
+  String get toolSummary => '${data['summary'] ?? ''}';
+
+  /// The model's own one-line account of what this step is for, sent by the
+  /// daemon for the tools that take a `description` (`Bash`, `Task`). Empty
+  /// for every other tool and for rows persisted before the field existed —
+  /// the step list then shows the tool's verb instead.
+  String get toolDescription => '${data['description'] ?? ''}'.trim();
+  bool get toolOk => data['ok'] != false;
+
+  /// Full display-ready tool detail (command + output, diff, matches…). The
+  /// daemon sends it as `content` — a string, or JSON we pretty-print.
+  String get toolContent {
+    final c = data['content'];
+    if (c == null) return '';
+    if (c is String) return c.trim();
+    try {
+      return const JsonEncoder.withIndent('  ').convert(c).trim();
+    } catch (_) {
+      return '$c';
+    }
+  }
+
+  /// Structured tool `content` when the daemon sent a JSON object (Write/Edit
+  /// emit `{path, size, diff, …}`). Null when content is a bare string or
+  /// absent — lets the renderer pick a rich diff view over the raw dump.
+  Map<String, dynamic>? get toolContentMap {
+    final c = data['content'];
+    return c is Map ? c.cast<String, dynamic>() : null;
+  }
+
+  // ── Permission accessors ───────────────────────────────────────────────
+  String get requestId => '${data['requestId'] ?? ''}';
+  String get permTitle => '${data['title'] ?? ''}';
+  String get permContent => '${data['content'] ?? ''}';
+  List<Map<String, dynamic>> get permOptions =>
+      ((data['options'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .toList();
+
+  /// For permission/question: which option key was chosen (null = pending).
+  String? get resolvedKey => data['resolvedKey'] as String?;
+  bool get resolved => data['resolved'] == true || resolvedKey != null;
+
+  // ── Widget accessor ────────────────────────────────────────────────────
+  /// The inline WidgetSpec (`{kind, title, data}`) for a `widget` message.
+  Map<String, dynamic>? get widget {
+    final w = data['widget'];
+    return w is Map ? w.cast<String, dynamic>() : null;
+  }
+
+  static MessageKind kindFromRole(String? role) {
+    switch (role) {
+      case 'user':
+        return MessageKind.user;
+      case 'other':
+        return MessageKind.other;
+      case 'tool':
+        return MessageKind.tool;
+      case 'permission':
+        return MessageKind.permission;
+      case 'question':
+        return MessageKind.question;
+      case 'form':
+        return MessageKind.form;
+      case 'widget':
+        return MessageKind.widget;
+      case 'system':
+        return MessageKind.system;
+      default:
+        return MessageKind.agent;
+    }
+  }
+}

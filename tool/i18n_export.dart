@@ -9,7 +9,7 @@
 // the web receives is exactly what the desktop renders — Dart's adjacent
 // string concatenation included, which a text parser gets wrong.
 //
-// Run from `desktop_app/`:
+// Run from the repo root:
 //
 //   dart run tool/i18n_export.dart
 //

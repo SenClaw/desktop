@@ -8,7 +8,7 @@ fn main() {
         let mut res = winresource::WindowsResource::new();
         // Same branded icon as the app itself, so the mini window and the
         // taskbar entry read as SenClaw, not as an anonymous tool.
-        res.set_icon("../desktop_app/windows/runner/resources/app_icon.ico");
+        res.set_icon("../windows/runner/resources/app_icon.ico");
         // v6 common controls (modern progress bar) + per-monitor DPI.
         res.set_manifest(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

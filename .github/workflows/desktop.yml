@@ -190,6 +190,14 @@ jobs:
       # unlike the old monorepo build, every platform builds identically.
       - name: Build senclaw daemon binary
         shell: bash
+        env:
+          # Google's desktop OAuth clients for the Antigravity and Gemini CLI
+          # sign-ins (senclaw's src/providers/oauth/provider.rs). Without these secrets
+          # the build simply does not offer those two providers.
+          SENCLAW_ANTIGRAVITY_OAUTH_CLIENT_ID: ${{ secrets.SENCLAW_ANTIGRAVITY_OAUTH_CLIENT_ID }}
+          SENCLAW_ANTIGRAVITY_OAUTH_CLIENT_SECRET: ${{ secrets.SENCLAW_ANTIGRAVITY_OAUTH_CLIENT_SECRET }}
+          SENCLAW_GEMINI_CLI_OAUTH_CLIENT_ID: ${{ secrets.SENCLAW_GEMINI_CLI_OAUTH_CLIENT_ID }}
+          SENCLAW_GEMINI_CLI_OAUTH_CLIENT_SECRET: ${{ secrets.SENCLAW_GEMINI_CLI_OAUTH_CLIENT_SECRET }}
         run: cargo build --release --bin senclaw --manifest-path senclaw/Cargo.toml --target ${{ matrix.target }}
 
       - name: Resolve release version

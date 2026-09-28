@@ -816,6 +816,15 @@ class _LocalModelsSettingsCardState extends ConsumerState<LocalModelsSettingsCar
   /// every model that never set it — see `_save`.
   bool _enableThinkingKnown = false;
 
+  /// TurboQuant KV (`kv_cache_bits`): `null` = off (FP16 KV), `3` = TQ3,
+  /// `4` = TQ4. Known/unknown like `enable_thinking`, for the same reason.
+  int? _kvCacheBits;
+  bool _kvCacheBitsKnown = false;
+
+  /// KV packed on Metal (`mlx_kv_cache_bits`): `null` = FP16, `4` or `8`.
+  int? _mlxKvCacheBits;
+  bool _mlxKvCacheBitsKnown = false;
+
   /// Every other engine key the daemon sent — passed back exactly as
   /// received so a field this form doesn't render yet survives a save.
   Map<String, dynamic> _engineRest = {};
@@ -827,7 +836,23 @@ class _LocalModelsSettingsCardState extends ConsumerState<LocalModelsSettingsCar
     'max_new_tokens',
     'max_kv_tokens',
     'enable_thinking',
+    'kv_cache_bits',
+    'mlx_kv_cache_bits',
   ];
+
+  /// The engine remaps a legacy `2` to TQ3 and treats `0` as off; anything
+  /// else the dropdown cannot show reads as off too.
+  static int? _turboQuantBits(dynamic v) => switch ((v as num?)?.toInt()) {
+        2 || 3 => 3,
+        4 => 4,
+        _ => null,
+      };
+
+  static int? _metalKvBits(dynamic v) => switch ((v as num?)?.toInt()) {
+        4 => 4,
+        8 => 8,
+        _ => null,
+      };
 
   @override
   void initState() {
@@ -864,6 +889,10 @@ class _LocalModelsSettingsCardState extends ConsumerState<LocalModelsSettingsCar
               engine['max_kv_tokens'] == null ? '' : '${engine['max_kv_tokens']}';
           _enableThinking = engine['enable_thinking'] == true;
           _enableThinkingKnown = engine.containsKey('enable_thinking');
+          _kvCacheBits = _turboQuantBits(engine['kv_cache_bits']);
+          _kvCacheBitsKnown = engine.containsKey('kv_cache_bits');
+          _mlxKvCacheBits = _metalKvBits(engine['mlx_kv_cache_bits']);
+          _mlxKvCacheBitsKnown = engine.containsKey('mlx_kv_cache_bits');
           _engineRest = {...engine}..removeWhere((k, _) => _knownKeys.contains(k));
         });
       }
@@ -896,6 +925,8 @@ class _LocalModelsSettingsCardState extends ConsumerState<LocalModelsSettingsCar
           if (_maxKvTokens.text.trim().isNotEmpty)
             'max_kv_tokens': int.tryParse(_maxKvTokens.text.trim()),
           if (_enableThinkingKnown) 'enable_thinking': _enableThinking,
+          if (_kvCacheBitsKnown) 'kv_cache_bits': _kvCacheBits,
+          if (_mlxKvCacheBitsKnown) 'mlx_kv_cache_bits': _mlxKvCacheBits,
         },
       });
       if (mounted) setState(() => _flash = context.tr('Saved'));
@@ -907,6 +938,26 @@ class _LocalModelsSettingsCardState extends ConsumerState<LocalModelsSettingsCar
       if (mounted) setState(() => _saving = false);
     }
   }
+
+  Widget _bitsField({
+    required String label,
+    required String hint,
+    required int? value,
+    required List<(int?, String)> options,
+    required ValueChanged<int?> onChanged,
+  }) =>
+      SizedBox(
+        width: 240,
+        child: DropdownButtonFormField<int?>(
+          initialValue: value,
+          isExpanded: true,
+          decoration: InputDecoration(labelText: label, helperText: hint, isDense: true),
+          items: [
+            for (final (v, text) in options) DropdownMenuItem(value: v, child: Text(text)),
+          ],
+          onChanged: onChanged,
+        ),
+      );
 
   Widget _numField(TextEditingController ctrl, String label) => SizedBox(
         width: 160,
@@ -941,6 +992,37 @@ class _LocalModelsSettingsCardState extends ConsumerState<LocalModelsSettingsCar
             _numField(_topP, context.tr('Top P')),
             _numField(_maxNewTokens, context.tr('Max new tokens')),
             _numField(_maxKvTokens, context.tr('Max KV tokens')),
+          ]),
+          const SizedBox(height: AppTokens.s12),
+          Wrap(spacing: AppTokens.s12, runSpacing: AppTokens.s12, children: [
+            _bitsField(
+              label: context.tr('TurboQuant KV'),
+              hint: context.tr('Compresses the KV cache on long contexts. MLX.'),
+              value: _kvCacheBits,
+              options: [
+                (null, context.tr('Off (FP16)')),
+                (3, context.tr('TQ3 — 3-bit')),
+                (4, context.tr('TQ4 — 4-bit')),
+              ],
+              onChanged: (v) => setState(() {
+                _kvCacheBits = v;
+                _kvCacheBitsKnown = true;
+              }),
+            ),
+            _bitsField(
+              label: context.tr('KV packed on Metal'),
+              hint: context.tr('mlx.core.quantize — saves RAM, MLX only.'),
+              value: _mlxKvCacheBits,
+              options: [
+                (null, 'FP16'),
+                (4, context.tr('4-bit')),
+                (8, context.tr('8-bit')),
+              ],
+              onChanged: (v) => setState(() {
+                _mlxKvCacheBits = v;
+                _mlxKvCacheBitsKnown = true;
+              }),
+            ),
           ]),
           const SizedBox(height: AppTokens.s12),
           Row(

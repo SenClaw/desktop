@@ -79,9 +79,13 @@ Map<String, dynamic> _localModels({bool failedDownload = false}) => {
 
 /// Serves the local-models endpoints and records what was sent.
 class _FakeApi implements ApiClient {
-  _FakeApi({this.failedDownload = false});
+  _FakeApi({this.failedDownload = false, this.engine});
   final bool failedDownload;
   final calls = <(String, Object?)>[];
+
+  /// The stored engine settings `GET /api/local-models/settings` returns;
+  /// `null` keeps the default fixture.
+  final Map<String, dynamic>? engine;
 
   @override
   void updateConfig(AppConfig config) {}
@@ -109,7 +113,7 @@ class _FakeApi implements ApiClient {
     if (path == '/api/local-models/settings') {
       return {
         'defaultContextLength': 8192,
-        'engine': {'temperature': 0.7, 'top_k': 40, 'unknown_future_field': 'keep-me'},
+        'engine': engine ?? {'temperature': 0.7, 'top_k': 40, 'unknown_future_field': 'keep-me'},
       };
     }
     return <String, dynamic>{};
@@ -142,12 +146,13 @@ class _FakeApi implements ApiClient {
   (String, Object?) lastCall(String prefix) => calls.lastWhere((c) => c.$1.startsWith(prefix));
 }
 
-Future<_FakeApi> _pump(WidgetTester tester, {String lang = 'en', bool failedDownload = false}) async {
+Future<_FakeApi> _pump(WidgetTester tester,
+    {String lang = 'en', bool failedDownload = false, Map<String, dynamic>? engine}) async {
   tester.view.physicalSize = const Size(1400, 2400);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
-  final api = _FakeApi(failedDownload: failedDownload);
+  final api = _FakeApi(failedDownload: failedDownload, engine: engine);
   await tester.pumpWidget(ProviderScope(
     overrides: [apiClientProvider.overrideWithValue(api)],
     child: MaterialApp(
@@ -242,6 +247,37 @@ void main() {
     expect(engine['temperature'], 0.7);
     expect(engine.containsKey('enable_thinking'), isFalse,
         reason: 'never inject enable_thinking:false for a model that never set it');
+    expect(engine.containsKey('kv_cache_bits'), isFalse,
+        reason: 'an untouched KV select must not write a key the daemon never sent');
+    expect(engine.containsKey('mlx_kv_cache_bits'), isFalse);
+  });
+
+  testWidgets('the TurboQuant and Metal KV selects show the stored bits and save a change',
+      (tester) async {
+    // A legacy `2` is what the engine remaps to TQ3.
+    final api = await _pump(tester, engine: {'kv_cache_bits': 2, 'mlx_kv_cache_bits': 8});
+
+    expect(find.text('TQ3 — 3-bit'), findsOneWidget);
+    expect(find.text('8-bit'), findsOneWidget);
+
+    await tester.tap(find.text('TQ3 — 3-bit'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('TQ4 — 4-bit').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('8-bit'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('FP16').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Save').last);
+    await tester.pumpAndSettle();
+
+    final body = (api.lastCall('PUT /api/local-models/settings').$2 as Map).cast<String, dynamic>();
+    final engine = (body['engine'] as Map).cast<String, dynamic>();
+    expect(engine['kv_cache_bits'], 4);
+    expect(engine.containsKey('mlx_kv_cache_bits'), isTrue,
+        reason: 'turning Metal KV back to FP16 must clear the stored 8, not drop the key');
+    expect(engine['mlx_kv_cache_bits'], isNull);
   });
 
   testWidgets(

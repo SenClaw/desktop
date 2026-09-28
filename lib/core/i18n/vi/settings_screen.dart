@@ -444,6 +444,15 @@ const Map<String, String> viSettingsScreen = {
   'Max tokens generated per request (1–8192). Default 8192.':
       'Số token sinh tối đa mỗi yêu cầu (1–8192). Mặc định 8192.',
   'Max KV tokens': 'Token KV tối đa',
+  'TurboQuant KV': 'TurboQuant KV',
+  'Compresses the KV cache on long contexts. MLX.': 'Nén KV cache khi ngữ cảnh dài. MLX.',
+  'Off (FP16)': 'Tắt (FP16)',
+  'TQ3 — 3-bit': 'TQ3 — 3-bit',
+  'TQ4 — 4-bit': 'TQ4 — 4-bit',
+  'KV packed on Metal': 'KV nén trên Metal',
+  '4-bit': '4-bit',
+  '8-bit': '8-bit',
+  'mlx.core.quantize — saves RAM, MLX only.': 'mlx.core.quantize — tiết kiệm RAM, chỉ MLX.',
   'KV-cache sliding window (128–262144). Default 16384.':
       'Cửa sổ trượt của KV-cache (128–262144). Mặc định 16384.',
   'Temperature (MLX)': 'Temperature (MLX)',

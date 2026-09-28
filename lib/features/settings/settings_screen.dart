@@ -28,6 +28,7 @@ import '../../core/update/update_service.dart' show bundlePath;
 import '../../theme/theme_mode_provider.dart';
 import '../../theme/tokens.dart';
 import 'pairing_section.dart';
+import 'browser_section.dart';
 import 'decision_section.dart';
 import 'local_models_section.dart';
 import 'lsp_section.dart';
@@ -63,6 +64,7 @@ const _sections = [
   ('tts', 'Text-to-Speech', Icons.volume_up_outlined),
   ('ocr', 'OCR', Icons.document_scanner_outlined),
   ('decision', 'Decision (Laya)', Icons.alt_route),
+  ('browser', 'Browser', Icons.web_outlined),
   ('runtime', 'Runtime', Icons.developer_board_outlined),
   ('local-models', 'Local models', Icons.storage_outlined),
   ('updates', 'Updates', Icons.system_update_alt),
@@ -130,6 +132,7 @@ class SettingsScreen extends ConsumerWidget {
                 domain: 'tts', title: context.tr('Text-to-Speech')),
             'ocr' => const _MediaModelsSection(domain: 'ocr', title: 'OCR'),
             'decision' => const DecisionSection(),
+            'browser' => const BrowserSection(),
             'runtime' => const RuntimeSection(),
             'local-models' => const LocalModelsSection(),
             'updates' => const UpdatesSection(),

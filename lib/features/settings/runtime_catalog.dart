@@ -36,6 +36,7 @@ const _typeFilters = [
   ('all', 'All types'),
   ('llm-engine', 'LLM engines'),
   ('decision', 'Decision'),
+  ('browser', 'Browser'),
   ('ocr', 'OCR'),
   ('asr', 'Speech to text'),
   ('tts', 'Text to speech'),
@@ -381,6 +382,7 @@ class _CatalogRow extends StatelessWidget {
   IconData _typeIcon() => switch (entry.type) {
         'llm-engine' => Icons.memory_outlined,
         'decision' => Icons.alt_route,
+        'browser' => Icons.web_outlined,
         'ocr' => Icons.document_scanner_outlined,
         'asr' => Icons.mic_none_outlined,
         'tts' => Icons.volume_up_outlined,

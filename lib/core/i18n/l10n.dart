@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:flutter/widgets.dart';
 
 import 'vi/background.dart';
+import 'vi/browser.dart';
 import 'vi/chat_main.dart';
 import 'vi/chat_misc.dart';
 import 'vi/chat_widgets.dart';
@@ -44,6 +45,7 @@ class L10n {
     ...viSettingsScreen,
     ...viSettingsMisc,
     ...viDecision,
+    ...viBrowser,
     ...viRuntime,
     ...viPluginsScreen,
     ...viPluginsMisc,

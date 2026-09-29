@@ -69,13 +69,17 @@ Stop whatever you started; never kill a process you did not start.
 
 ## Runtimes: the daemon links no inference code
 
-GGUF/MLX chat, OCR, Speech-to-text, Text-to-speech and Decision (Laya) all run
-as separate programs the daemon installs and launches — contract in
+GGUF/MLX chat, OCR, Speech-to-text, Text-to-speech, Decision (Laya) and the
+browser engine's Chrome driver (`sen-browser`, slot `browser`) all run as
+separate programs the daemon installs and launches — contract in
 [`../senclaw/docs/runtime-protocol.md`](../senclaw/docs/runtime-protocol.md).
 Settings → **Runtime** (`runtime_section.dart`, `runtime_catalog.dart`) and
 Settings → **Local models** (`local_models_section.dart`) are this app's
 clients of that contract; do not add a third place that manages engines or
-model files.
+model files. Settings → **Browser** (`browser_section.dart`) configures the
+browser engine itself (settings, the Chrome extension's pairing, actions a task
+paused on for the person — Approve/Decline) and links to Runtime for the
+engine's package; it never installs anything.
 
 **Runtime-missing is a first-class UI state, not an error to swallow.** A 503
 with `code` `runtime_not_installed` / `runtime_not_selected` /

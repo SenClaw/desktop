@@ -45,6 +45,15 @@ Map<String, dynamic> _runtimes({bool autoUpdate = false, bool multiVersionGguf =
           'selected': null,
           'candidates': <Map<String, dynamic>>[],
         },
+        {
+          'slot': 'browser',
+          'label': 'Browser',
+          'kind': 'capability',
+          'selected': {'id': 'sen-browser', 'version': '0.1.0', 'name': 'SenClaw Browser Engine'},
+          'candidates': [
+            {'id': 'sen-browser', 'version': '0.1.0', 'name': 'SenClaw Browser Engine'},
+          ],
+        },
       ],
       'installed': [
         {
@@ -81,6 +90,24 @@ Map<String, dynamic> _runtimes({bool autoUpdate = false, bool multiVersionGguf =
           'source': 'index',
           'description': 'MLX LLM runtime',
           'releaseNotesUrl': 'https://example.com/sen-mlx/notes',
+          'warnings': <String>[],
+        },
+        {
+          'id': 'sen-browser',
+          'name': 'SenClaw Browser Engine',
+          'version': '0.1.0',
+          'versions': ['0.1.0'],
+          'type': 'browser',
+          'slots': ['browser'],
+          'formats': <String>[],
+          'capabilities': ['browser'],
+          'platforms': ['darwin-arm64'],
+          'accelerator': null,
+          'mode': 'service',
+          'compatible': true,
+          'source': 'local',
+          'description': 'Chrome over CDP for the browser engine',
+          'releaseNotesUrl': null,
           'warnings': <String>[],
         },
       ],
@@ -176,6 +203,25 @@ Map<String, dynamic> _catalog() => {
           'available': false,
           'latestVersion': '',
           'installedVersion': null,
+          'updateAvailable': false,
+          'releaseNotesUrl': null,
+          'downloadSize': null,
+        },
+        {
+          // Installed from a local package before any release was published.
+          'id': 'sen-browser',
+          'name': 'SenClaw Browser Engine',
+          'description': 'Chrome over CDP for the browser engine',
+          'type': 'browser',
+          'slots': ['browser'],
+          'formats': <String>[],
+          'capabilities': ['browser'],
+          'accelerator': null,
+          'platforms': ['darwin-arm64'],
+          'compatible': true,
+          'available': false,
+          'latestVersion': '0.1.0',
+          'installedVersion': '0.1.0',
           'updateAvailable': false,
           'releaseNotesUrl': null,
           'downloadSize': null,
@@ -379,6 +425,14 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Install'), findsOneWidget, reason: 'sen-ocr is not installed');
     expect(find.text('Not published yet'), findsOneWidget, reason: 'sen-tts has no package yet');
     expect(find.text('Incompatible'), findsOneWidget, reason: 'sen-whisper-x86 does not run on this platform');
+    expect(find.text('Installed'), findsOneWidget, reason: 'sen-browser came from a local package, none published');
+  });
+
+  testWidgets('the browser engine has its own slot row', (tester) async {
+    await _pump(tester);
+
+    expect(find.text('Browser'), findsWidgets);
+    expect(find.text('SenClaw Browser Engine'), findsWidgets);
   });
 
   testWidgets('tapping Install sends the install request for that runtime', (tester) async {

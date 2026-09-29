@@ -477,6 +477,10 @@ class _CatalogRow extends StatelessWidget {
     if (!entry.compatible) {
       return DecisionChip(context.tr('Incompatible'), color: c.textMuted);
     }
+    // Installed from a local package before any release was published.
+    if (installed != null && !entry.available) {
+      return DecisionChip(context.tr('Installed'), color: AppTokens.success);
+    }
     if (!entry.available) {
       return DecisionChip(context.tr('Not published yet'), color: c.textMuted);
     }

@@ -76,4 +76,21 @@ const Map<String, String> viBrowser = {
 
   // Save
   'Settings saved': 'Đã lưu cài đặt',
+
+  // Waiting for your approval. "Approve" and "Goal" are shared keys defined
+  // elsewhere (settings_screen.dart, kanban.dart) with the same Vietnamese
+  // value this screen's spec calls for — reused, not repeated, per this
+  // file's own rule above.
+  'Waiting for your approval': 'Đang chờ bạn duyệt',
+  'A browser task paused before this action. Approve only if you want SenClaw to do it.':
+      'Một tác vụ trình duyệt đã dừng lại trước thao tác này. Chỉ duyệt khi bạn muốn SenClaw thực hiện nó.',
+  'SenClaw will do this in the browser now.': 'SenClaw sẽ thực hiện thao tác này trên trình duyệt ngay bây giờ.',
+  'Decline': 'Từ chối',
+  'Declined': 'Đã từ chối',
+  'Waiting {time}': 'Đã chờ {time}',
+  'The task went on: {status} — {message}': 'Tác vụ đã tiếp tục: {status} — {message}',
+  'Click': 'Nhấp',
+  'Press Enter': 'Nhấn Enter',
+  'Confirm a dialog': 'Xác nhận hộp thoại',
+  'Type text': 'Nhập chữ',
 };

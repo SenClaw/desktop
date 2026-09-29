@@ -47,6 +47,7 @@ class BrowserSection extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _EngineStatusCard(view: view),
+              const _ApprovalsCard(),
               _SettingsFormCard(
                 view: view,
                 onSaved: () => ref.invalidate(browserSettingsProvider),
@@ -101,6 +102,182 @@ class _EngineStatusCard extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+// ── Waiting for your approval (never starts the runtime) ────────────────
+
+class _ApprovalsCard extends ConsumerStatefulWidget {
+  const _ApprovalsCard();
+  @override
+  ConsumerState<_ApprovalsCard> createState() => _ApprovalsCardState();
+}
+
+class _ApprovalsCardState extends ConsumerState<_ApprovalsCard> {
+  Timer? _poll;
+
+  /// The approval an Approve/Decline POST is in flight for.
+  String? _busy;
+
+  @override
+  void initState() {
+    super.initState();
+    // Cheap and never starts the runtime, unlike `tabs` — safe to poll for
+    // as long as this card is on screen, same idea as the extension card's
+    // 3s poll (the spec asks 5s here).
+    _poll = Timer.periodic(const Duration(seconds: 5), (_) => ref.invalidate(browserApprovalsProvider));
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  void _toast(String msg) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _decide(PendingBrowserApproval a, {required bool approve}) async {
+    if (approve) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(ctx.tr('Approve')),
+          content: Text(ctx.tr('SenClaw will do this in the browser now.')),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Approve'))),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    setState(() => _busy = a.approvalId);
+    try {
+      final outcome =
+          await answerBrowserApproval(ref.read(apiClientProvider), a.approvalId, approve: approve);
+      if (!mounted) return;
+      // A decline that ended the task reads better as a plain "Declined"
+      // than as its own status/message — the task not continuing IS the
+      // whole story then. `needs_approval` is the one status meaning the
+      // task paused again rather than ending (confirmed against the
+      // daemon's own e2e approval fixture).
+      final ended = outcome.status != 'needs_approval';
+      _toast(!approve && ended
+          ? context.tr('Declined')
+          : context.trArgs('The task went on: {status} — {message}',
+              {'status': outcome.status, 'message': outcome.message}));
+    } on ApiException catch (e) {
+      _toast(e.message);
+    } catch (e) {
+      _toast('$e');
+    } finally {
+      // Reload on both success and error (including a 404 — the daemon's
+      // own signal that someone else already answered it): either way the
+      // list this card shows is now stale.
+      ref.invalidate(browserApprovalsProvider);
+      if (mounted) setState(() => _busy = null);
+    }
+  }
+
+  Widget _row(BuildContext context, PendingBrowserApproval a) {
+    final c = context.colors;
+    final busy = _busy == a.approvalId;
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppTokens.s8),
+      padding: const EdgeInsets.all(AppTokens.s12),
+      decoration: BoxDecoration(border: Border.all(color: c.border), borderRadius: BorderRadius.circular(AppTokens.rSm)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Wrap(spacing: AppTokens.s8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          Text(a.action, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w700, fontSize: 13)),
+          DecisionChip(_operationLabel(context, a.operation)),
+        ]),
+        const SizedBox(height: AppTokens.s4),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${context.tr('Goal')}: ',
+              style: TextStyle(color: c.textSecondary, fontWeight: FontWeight.w600, fontSize: 12.5)),
+          Expanded(child: Text(a.goal, style: TextStyle(color: c.textSecondary, fontSize: 12.5))),
+        ]),
+        if (a.url != null) ...[
+          const SizedBox(height: AppTokens.s4),
+          Text(a.url!,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 11.5),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+        ],
+        const SizedBox(height: AppTokens.s4),
+        Wrap(spacing: AppTokens.s8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          Text(a.chat, style: TextStyle(color: c.textMuted, fontSize: 11.5, fontFamily: 'monospace')),
+          if (a.waitingSecs != null)
+            Text(context.trArgs('Waiting {time}', {'time': formatBrowserWaitingTime(a.waitingSecs!)}),
+                style: TextStyle(color: c.textMuted, fontSize: 11.5)),
+        ]),
+        const SizedBox(height: AppTokens.s8),
+        Row(children: [
+          FilledButton(
+            onPressed: busy ? null : () => _decide(a, approve: true),
+            child: Text(context.tr('Approve')),
+          ),
+          const SizedBox(width: AppTokens.s8),
+          OutlinedButton(
+            onPressed: busy ? null : () => _decide(a, approve: false),
+            child: Text(context.tr('Decline')),
+          ),
+          if (busy) ...[
+            const SizedBox(width: AppTokens.s12),
+            const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+          ],
+        ]),
+      ]),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final async = ref.watch(browserApprovalsProvider);
+    return async.when(
+      // Hidden while there is no confirmed non-empty list — same call as an
+      // empty one, and (like the extension card) a failed 5s poll keeps
+      // showing the last good state rather than flashing an error over a
+      // transient hiccup: this card is a courtesy notice, never the only
+      // way to approve (the chat's own approval prompt always still works).
+      skipError: true,
+      loading: () => const SizedBox.shrink(),
+      error: (e, _) => const SizedBox.shrink(),
+      data: (approvals) {
+        if (approvals.isEmpty) return const SizedBox.shrink();
+        return decisionCard(
+          context,
+          title: context.tr('Waiting for your approval'),
+          icon: Icons.pending_actions_outlined,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            for (final a in approvals) _row(context, a),
+            Text(
+              context.tr('A browser task paused before this action. Approve only if you want SenClaw to do it.'),
+              style: TextStyle(color: c.textMuted, fontSize: 12),
+            ),
+          ]),
+        );
+      },
+    );
+  }
+}
+
+/// `CLICK` → "Click", … — anything not in the spec's table is shown as is.
+String _operationLabel(BuildContext context, String operation) {
+  switch (operation) {
+    case 'CLICK':
+      return context.tr('Click');
+    case 'KEY_ENTER':
+      return context.tr('Press Enter');
+    case 'DIALOG_ACCEPT':
+      return context.tr('Confirm a dialog');
+    case 'TYPE_TEXT':
+      return context.tr('Type text');
+    default:
+      return operation;
   }
 }
 

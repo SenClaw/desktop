@@ -210,4 +210,107 @@ void main() {
       expect(diff.containsKey('bandsLocal'), isFalse);
     });
   });
+
+  group('PendingBrowserApproval JSON (snake_case on the wire)', () {
+    test('parses every field of a paused CLICK action', () {
+      final a = PendingBrowserApproval.fromJson(const {
+        'approval_id': 'appr-1',
+        'task_id': 'task-1',
+        'chat': 'chat:123',
+        'goal': 'Buy the blue mug in my cart',
+        'action': 'Place order',
+        'operation': 'CLICK',
+        'text': null,
+        'driver': 'managed',
+        'url': 'https://example.com/checkout.html',
+        'waiting_secs': 65,
+      });
+      expect(a.approvalId, 'appr-1');
+      expect(a.taskId, 'task-1');
+      expect(a.chat, 'chat:123');
+      expect(a.goal, 'Buy the blue mug in my cart');
+      expect(a.action, 'Place order');
+      expect(a.operation, 'CLICK');
+      expect(a.text, isNull);
+      expect(a.driver, 'managed');
+      expect(a.url, 'https://example.com/checkout.html');
+      expect(a.waitingSecs, 65);
+    });
+
+    test('text, url and waiting_secs missing entirely parse to null, not a crash or a default', () {
+      final a = PendingBrowserApproval.fromJson(const {
+        'approval_id': 'appr-2',
+        'task_id': 'task-2',
+        'chat': 'chat:456',
+        'goal': 'Fill the newsletter form',
+        'action': 'Submit',
+        'operation': 'KEY_ENTER',
+        'driver': 'extension',
+      });
+      expect(a.text, isNull);
+      expect(a.url, isNull);
+      expect(a.waitingSecs, isNull);
+    });
+
+    test('a present text field (TYPE_TEXT) parses through', () {
+      final a = PendingBrowserApproval.fromJson(const {
+        'approval_id': 'appr-3',
+        'task_id': 'task-3',
+        'chat': 'chat:789',
+        'goal': 'Sign up',
+        'action': 'Type email',
+        'operation': 'TYPE_TEXT',
+        'text': 'me@example.com',
+        'driver': 'managed',
+        'url': 'https://example.com/signup',
+        'waiting_secs': 3,
+      });
+      expect(a.text, 'me@example.com');
+    });
+  });
+
+  group('formatBrowserWaitingTime', () {
+    test('seconds under a minute show as seconds', () {
+      expect(formatBrowserWaitingTime(0), '0s');
+      expect(formatBrowserWaitingTime(45), '45s');
+      expect(formatBrowserWaitingTime(59), '59s');
+    });
+
+    test('a minute or more, under an hour, shows whole minutes only', () {
+      expect(formatBrowserWaitingTime(60), '1m');
+      expect(formatBrowserWaitingTime(179), '2m'); // still short of 3m, not rounded up
+      expect(formatBrowserWaitingTime(180), '3m');
+      expect(formatBrowserWaitingTime(3599), '59m');
+    });
+
+    test('an hour or more shows hours, plus minutes only when there is a remainder', () {
+      expect(formatBrowserWaitingTime(3600), '1h');
+      expect(formatBrowserWaitingTime(3900), '1h 5m');
+      expect(formatBrowserWaitingTime(7260), '2h 1m');
+    });
+
+    test('a negative value (defensive only — the daemon never sends one) clamps to 0s', () {
+      expect(formatBrowserWaitingTime(-5), '0s');
+    });
+  });
+
+  group('BrowserApprovalOutcome JSON', () {
+    test('parses task_id, status and message', () {
+      final o = BrowserApprovalOutcome.fromJson(const {
+        'task_id': 'task-1',
+        'status': 'needs_approval',
+        'message': 'paused again on the next dialog',
+      });
+      expect(o.taskId, 'task-1');
+      expect(o.status, 'needs_approval');
+      expect(o.message, 'paused again on the next dialog');
+    });
+
+    test('missing fields fall back to empty strings, not a crash', () {
+      final o = BrowserApprovalOutcome.fromJson(const {});
+      expect(o.taskId, '');
+      expect(o.status, '');
+      expect(o.message, '');
+    });
+  });
 }

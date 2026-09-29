@@ -6,6 +6,7 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/transport/api_client.dart' show ApiClient;
 import '../../core/transport/connection.dart';
 
 Map<String, dynamic> _asMap(dynamic v) => v is Map ? v.cast<String, dynamic>() : {};
@@ -391,4 +392,123 @@ class BrowserTabsState {
             ? BrowserExtensionState.fromJson(_asMap(j['extension']))
             : const BrowserExtensionState(connected: null, pending: [], paired: []),
       );
+}
+
+// ── Waiting for your approval (never starts the runtime) ────────────────
+
+/// One paused browser-task action from `GET /api/browser-agent/approvals`,
+/// oldest first. `text`/`url`/`waitingSecs` are the fields the daemon may
+/// send as `null` — not every paused operation has typed text or ran on a
+/// page with a URL to show.
+class PendingBrowserApproval {
+  const PendingBrowserApproval({
+    required this.approvalId,
+    required this.taskId,
+    required this.chat,
+    required this.goal,
+    required this.action,
+    required this.operation,
+    this.text,
+    required this.driver,
+    this.url,
+    this.waitingSecs,
+  });
+
+  final String approvalId;
+  final String taskId;
+
+  /// The chat that owns the paused task.
+  final String chat;
+  final String goal;
+
+  /// The paused action's own label, e.g. "Place order" — shown bold,
+  /// verbatim (it is the daemon's text, not translated here).
+  final String action;
+
+  /// `CLICK` | `KEY_ENTER` | `DIALOG_ACCEPT` | `TYPE_TEXT` | … — see
+  /// `_operationLabel` in browser_section.dart for the friendly mapping.
+  final String operation;
+
+  /// The text `TYPE_TEXT` would type, when that is the paused operation.
+  final String? text;
+  final String driver;
+  final String? url;
+  final int? waitingSecs;
+
+  factory PendingBrowserApproval.fromJson(Map<String, dynamic> j) => PendingBrowserApproval(
+        approvalId: '${j['approval_id'] ?? ''}',
+        taskId: '${j['task_id'] ?? ''}',
+        chat: '${j['chat'] ?? ''}',
+        goal: '${j['goal'] ?? ''}',
+        action: '${j['action'] ?? ''}',
+        operation: '${j['operation'] ?? ''}',
+        text: _str(j['text']),
+        driver: '${j['driver'] ?? ''}',
+        url: _str(j['url']),
+        waitingSecs: j['waiting_secs'] is num ? (j['waiting_secs'] as num).toInt() : null,
+      );
+}
+
+/// Polled every 5s while the approvals card is visible — cheap, and (like
+/// `extension` above, unlike `tabs`) never starts the runtime.
+final browserApprovalsProvider = FutureProvider<List<PendingBrowserApproval>>((ref) async {
+  final r = await ref.read(apiClientProvider).get('/api/browser-agent/approvals');
+  return (_asMap(r)['approvals'] as List? ?? const [])
+      .whereType<Map>()
+      .map((m) => PendingBrowserApproval.fromJson(m.cast<String, dynamic>()))
+      .toList();
+});
+
+/// `45s` / `3m` / `1h 5m` — seconds compacted to at most two units, the
+/// smaller one dropped once whole minutes are reached. The result is spliced
+/// into the translated `Waiting {time}` template as-is: the unit letters
+/// (`s`/`m`/`h`) are not translated, same as `up {m}m` in runtime_section.dart.
+String formatBrowserWaitingTime(int seconds) {
+  final s = seconds < 0 ? 0 : seconds;
+  if (s < 60) return '${s}s';
+  final minutes = s ~/ 60;
+  if (minutes < 60) return '${minutes}m';
+  final hours = minutes ~/ 60;
+  final restMinutes = minutes % 60;
+  return restMinutes == 0 ? '${hours}h' : '${hours}h ${restMinutes}m';
+}
+
+/// `POST /api/browser-agent/approvals/:id` outcome — `{task_id, status,
+/// message, …}` once the task pauses again or ends. Further fields the
+/// daemon may add are intentionally not modeled; only these three matter to
+/// the UI.
+class BrowserApprovalOutcome {
+  const BrowserApprovalOutcome({required this.taskId, required this.status, required this.message});
+  final String taskId;
+
+  /// `needs_approval` means the task paused again on a new action; anything
+  /// else means it ended (done, blocked, error, …).
+  final String status;
+  final String message;
+
+  factory BrowserApprovalOutcome.fromJson(Map<String, dynamic> j) => BrowserApprovalOutcome(
+        taskId: '${j['task_id'] ?? ''}',
+        status: '${j['status'] ?? ''}',
+        message: '${j['message'] ?? ''}',
+      );
+}
+
+/// Answers a paused browser task. The task keeps running inside this call
+/// until it pauses again or ends — the daemon's own contract calls that
+/// "can take minutes" with no fixed ceiling, so this is given a generous
+/// timeout instead of the default [kApiTimeout] (unlike every other call in
+/// this file, none of which touch the runtime at all). A `404`
+/// (`code: "no_approval"`) means someone already answered it elsewhere; it
+/// surfaces as an ordinary [ApiException], same as any other daemon error.
+Future<BrowserApprovalOutcome> answerBrowserApproval(
+  ApiClient api,
+  String approvalId, {
+  required bool approve,
+}) async {
+  final r = await api.post(
+    '/api/browser-agent/approvals/${Uri.encodeComponent(approvalId)}',
+    body: {'approve': approve},
+    timeout: const Duration(minutes: 30),
+  );
+  return BrowserApprovalOutcome.fromJson((r as Map).cast<String, dynamic>());
 }

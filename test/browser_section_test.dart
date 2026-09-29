@@ -41,6 +41,9 @@ class _FakeApi implements ApiClient {
     this.paired = const [],
     this.connected,
     this.tabs,
+    this.approvals = const [],
+    this.approvalOutcome,
+    this.approvalError,
   });
   final String engine;
   final bool runtimeInstalled;
@@ -48,6 +51,16 @@ class _FakeApi implements ApiClient {
   final List<Map<String, dynamic>> paired;
   final Map<String, dynamic>? connected;
   final Map<String, dynamic>? tabs;
+  final List<Map<String, dynamic>> approvals;
+
+  /// What `POST /api/browser-agent/approvals/:id` answers with when it
+  /// succeeds. Defaults to a task that ended.
+  final Map<String, dynamic>? approvalOutcome;
+
+  /// When set, the approvals POST throws this instead of answering — the
+  /// way to fake a 404 ("already answered elsewhere") or any other daemon
+  /// error.
+  final ApiException? approvalError;
 
   final calls = <(String, Object?)>[];
 
@@ -64,6 +77,7 @@ class _FakeApi implements ApiClient {
       '/api/browser-agent/settings' => _settingsView(engine: engine, runtimeInstalled: runtimeInstalled),
       '/api/browser-agent/extension' => {'connected': connected, 'pending': pending, 'paired': paired},
       '/api/browser-agent/tabs' => tabs ?? {'sessions': <Map<String, dynamic>>[], 'current': {}, 'extension': {}},
+      '/api/browser-agent/approvals' => {'approvals': approvals},
       '/api/llm-config' => {'configs': <Map<String, dynamic>>[]},
       _ => <String, dynamic>{},
     };
@@ -81,10 +95,15 @@ class _FakeApi implements ApiClient {
   @override
   Future<dynamic> post(String path, {Object? body, Duration? timeout}) async {
     calls.add(('POST $path', body));
-    const prefix = '/api/browser-agent/extension/pairings/';
-    if (path.startsWith(prefix) && path.endsWith('/approve')) {
-      final code = path.substring(prefix.length, path.length - '/approve'.length);
+    const pairPrefix = '/api/browser-agent/extension/pairings/';
+    if (path.startsWith(pairPrefix) && path.endsWith('/approve')) {
+      final code = path.substring(pairPrefix.length, path.length - '/approve'.length);
       return {'paired': 'ext-$code'};
+    }
+    const approvalsPrefix = '/api/browser-agent/approvals/';
+    if (path.startsWith(approvalsPrefix)) {
+      if (approvalError != null) throw approvalError!;
+      return approvalOutcome ?? {'task_id': 'task-1', 'status': 'done', 'message': 'done'};
     }
     return {'ok': true};
   }
@@ -100,7 +119,33 @@ class _FakeApi implements ApiClient {
 
   Map<String, dynamic> lastBody(String call) => (calls.lastWhere((c) => c.$1 == call).$2 as Map).cast<String, dynamic>();
   bool called(String call) => calls.any((c) => c.$1 == call);
+  int callCount(String call) => calls.where((c) => c.$1 == call).length;
 }
+
+Map<String, dynamic> _approvalJson({
+  String approvalId = 'appr-1',
+  String taskId = 'task-1',
+  String chat = 'chat:123',
+  String goal = 'Buy the blue mug in my cart',
+  String action = 'Place order',
+  String operation = 'CLICK',
+  String? text,
+  String driver = 'managed',
+  String? url = 'https://example.com/checkout.html',
+  int? waitingSecs = 65,
+}) =>
+    {
+      'approval_id': approvalId,
+      'task_id': taskId,
+      'chat': chat,
+      'goal': goal,
+      'action': action,
+      'operation': operation,
+      'text': text,
+      'driver': driver,
+      'url': url,
+      'waiting_secs': waitingSecs,
+    };
 
 Future<_FakeApi> _pump(WidgetTester tester, {_FakeApi? api}) async {
   // Tall enough that the lazy settings list builds every card.
@@ -261,5 +306,119 @@ void main() {
     expect(find.widgetWithText(OutlinedButton, 'Open Runtime settings'), findsNothing);
     expect(find.text('Connected'), findsOneWidget);
     expect(find.textContaining('ext-live'), findsOneWidget);
+  });
+
+  testWidgets('the approvals card is hidden when the list is empty', (tester) async {
+    await _pump(tester);
+    expect(find.text('Waiting for your approval'), findsNothing);
+  });
+
+  testWidgets('a pending approval lists its action, operation, goal, url, chat and waiting time', (tester) async {
+    await _pump(tester, api: _FakeApi(approvals: [_approvalJson()]));
+
+    expect(find.text('Waiting for your approval'), findsOneWidget);
+    expect(find.text('Place order'), findsOneWidget);
+    expect(find.text('Click'), findsOneWidget); // CLICK's friendly operation label
+    expect(find.text('Goal: '), findsOneWidget);
+    expect(find.text('Buy the blue mug in my cart'), findsOneWidget);
+    expect(find.text('https://example.com/checkout.html'), findsOneWidget);
+    expect(find.text('chat:123'), findsOneWidget);
+    expect(find.text('Waiting 1m'), findsOneWidget); // 65s -> 1m
+    expect(
+        find.text('A browser task paused before this action. Approve only if you want SenClaw to do it.'),
+        findsOneWidget);
+  });
+
+  testWidgets('an unrecognized operation is shown as is', (tester) async {
+    await _pump(tester, api: _FakeApi(approvals: [_approvalJson(operation: 'SCROLL')]));
+    expect(find.text('SCROLL'), findsOneWidget);
+  });
+
+  testWidgets('Approve confirms first, then POSTs approve:true and toasts the outcome', (tester) async {
+    final api = await _pump(
+      tester,
+      api: _FakeApi(
+        approvals: [_approvalJson()],
+        approvalOutcome: {'task_id': 'task-1', 'status': 'done', 'message': 'Order placed'},
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Approve'));
+    await tester.pumpAndSettle();
+    expect(find.text('SenClaw will do this in the browser now.'), findsOneWidget);
+    expect(api.called('POST /api/browser-agent/approvals/appr-1'), isFalse,
+        reason: 'not sent until the confirm dialog itself is accepted');
+
+    // Two "Approve" buttons exist once the dialog is open: the row's and the
+    // dialog's — scope the tap to the dialog so it cannot hit the row one.
+    await tester.tap(find.descendant(
+        of: find.byType(AlertDialog), matching: find.widgetWithText(FilledButton, 'Approve')));
+    await tester.pumpAndSettle();
+
+    expect(api.called('POST /api/browser-agent/approvals/appr-1'), isTrue);
+    expect(api.lastBody('POST /api/browser-agent/approvals/appr-1'), {'approve': true});
+    expect(find.text('The task went on: done — Order placed'), findsOneWidget);
+    expect(api.callCount('GET /api/browser-agent/approvals'), greaterThanOrEqualTo(2),
+        reason: 'the list reloads afterwards');
+  });
+
+  testWidgets('Approve cancelled at the confirm dialog sends nothing', (tester) async {
+    final api = await _pump(tester, api: _FakeApi(approvals: [_approvalJson()]));
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Approve'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(api.called('POST /api/browser-agent/approvals/appr-1'), isFalse);
+  });
+
+  testWidgets('Decline needs no confirm dialog; a decline that ends the task toasts Declined', (tester) async {
+    final api = await _pump(
+      tester,
+      api: _FakeApi(
+        approvals: [_approvalJson()],
+        approvalOutcome: {'task_id': 'task-1', 'status': 'cancelled', 'message': 'stopped'},
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Decline'));
+    await tester.pumpAndSettle();
+
+    expect(api.lastBody('POST /api/browser-agent/approvals/appr-1'), {'approve': false});
+    expect(find.text('Declined'), findsOneWidget);
+  });
+
+  testWidgets('a decline the task survives (still needs_approval) shows the status message, not Declined',
+      (tester) async {
+    await _pump(
+      tester,
+      api: _FakeApi(
+        approvals: [_approvalJson()],
+        approvalOutcome: {'task_id': 'task-1', 'status': 'needs_approval', 'message': 'trying another way'},
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Decline'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Declined'), findsNothing);
+    expect(find.text('The task went on: needs_approval — trying another way'), findsOneWidget);
+  });
+
+  testWidgets('a POST error (e.g. 404 already answered) shows the daemon message and reloads', (tester) async {
+    final api = await _pump(
+      tester,
+      api: _FakeApi(
+        approvals: [_approvalJson()],
+        approvalError: ApiException(404, 'Someone already answered this.', code: 'no_approval'),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Decline'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Someone already answered this.'), findsOneWidget);
+    expect(api.callCount('GET /api/browser-agent/approvals'), greaterThanOrEqualTo(2));
   });
 }

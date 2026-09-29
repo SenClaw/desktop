@@ -406,6 +406,22 @@ void main() {
     expect(find.text('The task went on: needs_approval — trying another way'), findsOneWidget);
   });
 
+  testWidgets('a decline after which the task waits for the person shows that status, not Declined', (tester) async {
+    await _pump(
+      tester,
+      api: _FakeApi(
+        approvals: [_approvalJson()],
+        approvalOutcome: {'task_id': 'task-1', 'status': 'needs_user', 'message': 'a sign-in is needed'},
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Decline'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Declined'), findsNothing);
+    expect(find.text('The task went on: needs_user — a sign-in is needed'), findsOneWidget);
+  });
+
   testWidgets('a POST error (e.g. 404 already answered) shows the daemon message and reloads', (tester) async {
     final api = await _pump(
       tester,

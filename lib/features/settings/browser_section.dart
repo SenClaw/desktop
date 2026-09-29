@@ -160,10 +160,11 @@ class _ApprovalsCardState extends ConsumerState<_ApprovalsCard> {
       if (!mounted) return;
       // A decline that ended the task reads better as a plain "Declined"
       // than as its own status/message — the task not continuing IS the
-      // whole story then. `needs_approval` is the one status meaning the
-      // task paused again rather than ending (confirmed against the
-      // daemon's own e2e approval fixture).
-      final ended = outcome.status != 'needs_approval';
+      // whole story then. These three statuses mean it paused again (for
+      // another approval, for the person, for a value) rather than ended;
+      // the web card uses the same list.
+      const paused = {'needs_approval', 'needs_user', 'needs_input'};
+      final ended = !paused.contains(outcome.status);
       _toast(!approve && ended
           ? context.tr('Declined')
           : context.trArgs('The task went on: {status} — {message}',

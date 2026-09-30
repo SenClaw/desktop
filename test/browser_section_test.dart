@@ -9,7 +9,13 @@ import 'package:senclaw_desktop/core/transport/connection.dart';
 import 'package:senclaw_desktop/features/settings/browser_section.dart';
 import 'package:senclaw_desktop/theme/app_theme.dart';
 
-Map<String, dynamic> _settingsView({String engine = 'legacy', bool runtimeInstalled = false}) => {
+Map<String, dynamic> _settingsView({
+  String engine = 'legacy',
+  bool runtimeInstalled = false,
+  Map<String, dynamic>? decisionModel,
+}) =>
+    {
+      'decisionModel': ?decisionModel,
       'settings': {
         'engine': 'auto',
         'defaultDriver': 'managed',
@@ -37,6 +43,7 @@ class _FakeApi implements ApiClient {
   _FakeApi({
     this.engine = 'legacy',
     this.runtimeInstalled = false,
+    this.decisionModel,
     this.pending = const [],
     this.paired = const [],
     this.connected,
@@ -47,6 +54,7 @@ class _FakeApi implements ApiClient {
   });
   final String engine;
   final bool runtimeInstalled;
+  final Map<String, dynamic>? decisionModel;
   final List<Map<String, dynamic>> pending;
   final List<Map<String, dynamic>> paired;
   final Map<String, dynamic>? connected;
@@ -74,7 +82,8 @@ class _FakeApi implements ApiClient {
   Future<dynamic> get(String path, {Map<String, dynamic>? query, Duration? timeout}) async {
     calls.add(('GET $path', null));
     return switch (path) {
-      '/api/browser-agent/settings' => _settingsView(engine: engine, runtimeInstalled: runtimeInstalled),
+      '/api/browser-agent/settings' =>
+        _settingsView(engine: engine, runtimeInstalled: runtimeInstalled, decisionModel: decisionModel),
       '/api/browser-agent/extension' => {'connected': connected, 'pending': pending, 'paired': paired},
       '/api/browser-agent/tabs' => tabs ?? {'sessions': <Map<String, dynamic>>[], 'current': {}, 'extension': {}},
       '/api/browser-agent/approvals' => {'approvals': approvals},
@@ -306,6 +315,39 @@ void main() {
     expect(find.widgetWithText(OutlinedButton, 'Open Runtime settings'), findsNothing);
     expect(find.text('Connected'), findsOneWidget);
     expect(find.textContaining('ext-live'), findsOneWidget);
+  });
+
+  testWidgets('a missing decision model is named, with the way to where it is installed', (tester) async {
+    await _pump(
+      tester,
+      api: _FakeApi(
+        engine: 'v2',
+        runtimeInstalled: true,
+        decisionModel: const {'id': 'laya-browser', 'needed': true, 'installed': false},
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('The decision model is not installed: laya-browser'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Open Decision settings'), findsOneWidget);
+  });
+
+  testWidgets('an installed decision model, or the legacy engine, shows no such warning', (tester) async {
+    await _pump(
+      tester,
+      api: _FakeApi(
+        engine: 'v2',
+        runtimeInstalled: true,
+        decisionModel: const {'id': 'laya-browser', 'needed': true, 'installed': true},
+      ),
+    );
+    expect(find.textContaining('The decision model is not installed'), findsNothing);
+
+    await _pump(
+      tester,
+      api: _FakeApi(decisionModel: const {'id': 'laya-browser', 'needed': true, 'installed': false}),
+    );
+    expect(find.textContaining('The decision model is not installed'), findsNothing,
+        reason: 'the legacy engine has no decision loop');
   });
 
   testWidgets('the approvals card is hidden when the list is empty', (tester) async {

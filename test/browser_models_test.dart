@@ -42,6 +42,24 @@ Map<String, dynamic> _extensionJson() => {
     };
 
 void main() {
+  group('decision model state', () {
+    test('is read when the daemon sends it, and missing means needed but not installed', () {
+      final json = _settingsJson()..['decisionModel'] = {'id': 'laya-browser', 'needed': true, 'installed': false};
+      final state = BrowserSettingsView.fromJson(json).decisionModel!;
+      expect((state.id, state.needed, state.installed, state.missing), ('laya-browser', true, false, true));
+
+      json['decisionModel'] = {'id': 'laya-browser', 'needed': true, 'installed': true};
+      expect(BrowserSettingsView.fromJson(json).decisionModel!.missing, isFalse);
+      // The LLM picks every step by choice: nothing is missing.
+      json['decisionModel'] = {'id': 'laya-browser', 'needed': false, 'installed': false};
+      expect(BrowserSettingsView.fromJson(json).decisionModel!.missing, isFalse);
+    });
+
+    test('is absent from an older daemon', () {
+      expect(BrowserSettingsView.fromJson(_settingsJson()).decisionModel, isNull);
+    });
+  });
+
   group('BrowserSettings / BrowserSettingsView JSON', () {
     test('parses every camelCase field, including nested bands and domain map', () {
       final view = BrowserSettingsView.fromJson(_settingsJson());

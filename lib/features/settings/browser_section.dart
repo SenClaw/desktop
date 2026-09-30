@@ -14,7 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app/shell.dart' show openRuntimeSettings;
+import '../../app/shell.dart' show openDecisionSettings, openRuntimeSettings;
 import '../../core/i18n/l10n.dart';
 import '../../core/transport/api_client.dart' show ApiException;
 import '../../core/transport/connection.dart';
@@ -97,6 +97,21 @@ class _EngineStatusCard extends ConsumerWidget {
               onPressed: () => openRuntimeSettings(context, ref),
               icon: const Icon(Icons.settings_outlined, size: 16),
               label: Text(context.tr('Open Runtime settings')),
+            ),
+          ],
+          if (view.engine == 'v2' && (view.decisionModel?.missing ?? false)) ...[
+            const SizedBox(height: AppTokens.s12),
+            decisionNotice(
+              context,
+              '${context.tr('The decision model is not installed:')} ${view.decisionModel!.id}. '
+              '${context.tr('Every browser step is then chosen by the chat model: seconds per step instead of a fraction of one.')}',
+              tone: AppTokens.warning,
+            ),
+            const SizedBox(height: AppTokens.s8),
+            OutlinedButton.icon(
+              onPressed: () => openDecisionSettings(context, ref),
+              icon: const Icon(Icons.alt_route, size: 16),
+              label: Text(context.tr('Open Decision settings')),
             ),
           ],
         ],

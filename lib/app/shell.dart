@@ -99,6 +99,12 @@ void openRuntimeSettings(BuildContext context, WidgetRef ref) {
   context.go('/settings');
 }
 
+/// Settings → Decision (Laya): where a decision checkpoint is installed.
+void openDecisionSettings(BuildContext context, WidgetRef ref) {
+  ref.read(settingsSectionProvider.notifier).state = 'decision';
+  context.go('/settings');
+}
+
 class _NavRail extends ConsumerWidget {
   const _NavRail({required this.location});
   final String location;

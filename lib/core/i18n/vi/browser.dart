@@ -19,6 +19,10 @@ const Map<String, String> viBrowser = {
   'New (Jev + LLM)': 'Mới (Jev + LLM)',
   'Legacy (extension scripts)': 'Cũ (script trong extension)',
   'The Browser runtime is not installed.': 'Runtime Browser chưa được cài.',
+  'The decision model is not installed:': 'Mô hình quyết định chưa được cài:',
+  'Every browser step is then chosen by the chat model: seconds per step instead of a fraction of one.':
+      'Khi đó mỗi bước duyệt web do mô hình chat chọn: mất vài giây mỗi bước thay vì chưa tới một giây.',
+  'Open Decision settings': 'Mở cài đặt Decision',
 
   // Settings form — General
   'Engine': 'Engine',

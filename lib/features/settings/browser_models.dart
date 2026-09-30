@@ -172,12 +172,33 @@ class BrowserSettings {
       );
 }
 
+/// The loop's local decision checkpoint, as the daemon finds it on disk.
+class DecisionModelState {
+  const DecisionModelState({required this.id, required this.needed, required this.installed});
+  final String id;
+
+  /// False when every step is the LLM's by choice (`decisionBackend: llm-only`).
+  final bool needed;
+  final bool installed;
+
+  /// Without the checkpoint every step falls to the chat model: seconds per
+  /// step instead of a fraction of one, and nothing else says why.
+  bool get missing => needed && !installed;
+
+  factory DecisionModelState.fromJson(Map<String, dynamic> j) => DecisionModelState(
+        id: j['id'] is String ? j['id'] as String : '',
+        needed: j['needed'] == true,
+        installed: j['installed'] == true,
+      );
+}
+
 /// `GET` / `PUT /api/browser-agent/settings`.
 class BrowserSettingsView {
   const BrowserSettingsView({
     required this.settings,
     required this.engine,
     required this.runtimeInstalled,
+    this.decisionModel,
   });
   final BrowserSettings settings;
 
@@ -185,12 +206,17 @@ class BrowserSettingsView {
   final String engine;
   final bool runtimeInstalled;
 
+  /// Null from a daemon that predates the field.
+  final DecisionModelState? decisionModel;
+
   factory BrowserSettingsView.fromJson(Map<String, dynamic> j) => BrowserSettingsView(
         settings: j['settings'] is Map
             ? BrowserSettings.fromJson(_asMap(j['settings']))
             : const BrowserSettings(),
         engine: j['engine'] == 'v2' ? 'v2' : 'legacy',
         runtimeInstalled: j['runtimeInstalled'] == true,
+        decisionModel:
+            j['decisionModel'] is Map ? DecisionModelState.fromJson(_asMap(j['decisionModel'])) : null,
       );
 }
 

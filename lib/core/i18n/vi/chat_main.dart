@@ -50,6 +50,12 @@ const Map<String, String> viChatMain = {
   'Memory saved': 'Đã lưu bộ nhớ',
   'Save failed': 'Lưu thất bại',
   'Active default': 'Mặc định đang dùng',
+  'THIS CHAT': 'ĐOẠN CHAT NÀY',
+  'Transcript of this chat is stored separately from agent MEMORY.md. Clearing messages does not erase agent memory.':
+      'Lịch sử đoạn chat này lưu riêng với MEMORY.md của agent. Xoá tin nhắn không xoá bộ nhớ agent.',
+  'CONTEXT USAGE': 'MỨC DÙNG NGỮ CẢNH',
+  'Includes system prompt, tools, SOUL, memory recall, and recent turns — not only visible chat messages.':
+      'Gồm system prompt, công cụ, SOUL, memory recall và vài lượt gần — không chỉ tin nhắn hiện trên màn hình.',
   'CONTEXT LENGTH': 'ĐỘ DÀI NGỮ CẢNH',
   '{use} / {max} tokens ({pct}%) · {remaining} left{promptPart}':
       '{use} / {max} token ({pct}%) · còn {remaining}{promptPart}',
@@ -58,6 +64,10 @@ const Map<String, String> viChatMain = {
       'Chưa có dữ liệu sử dụng (hãy gửi một tin nhắn).',
   'Compacting context…': 'Đang nén ngữ cảnh…',
   'Compact context': 'Nén ngữ cảnh',
+  'AGENT MEMORY (MEMORY.md — shared)':
+      'BỘ NHỚ AGENT (MEMORY.md — dùng chung)',
+  'Long-term notes for this agent folder — shared by every chat bound to the same agent, not unique to this JID.':
+      'Ghi chú dài hạn của thư mục agent — dùng chung mọi đoạn chat gắn cùng agent, không riêng JID này.',
   'MEMORY CONTEXT (MEMORY.md)': 'BỘ NHỚ NGỮ CẢNH (MEMORY.md)',
   'No agent folder bound to this chat.':
       'Đoạn chat này chưa gắn với thư mục agent nào.',
@@ -65,6 +75,8 @@ const Map<String, String> viChatMain = {
       'Chưa có bộ nhớ — nhập ghi chú mà agent nên nhớ…',
   'DANGER ZONE': 'VÙNG NGUY HIỂM',
   'Clear all messages': 'Xoá tất cả tin nhắn',
+  'Stops the agent and permanently deletes every message, tool log, and chat event of this session. Agent MEMORY.md is kept.':
+      'Dừng agent và xoá vĩnh viễn mọi tin nhắn, nhật ký công cụ và sự kiện chat của phiên này. MEMORY.md của agent được giữ lại.',
   'Stops the agent and permanently deletes every message, tool log, and chat event of this session.':
       'Dừng agent và xoá vĩnh viễn mọi tin nhắn, nhật ký công cụ và sự kiện chat của phiên này.',
   'Clear all messages?': 'Xoá tất cả tin nhắn?',

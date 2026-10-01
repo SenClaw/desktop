@@ -1371,8 +1371,8 @@ class _CoworkTasksDialog extends ConsumerWidget {
   }
 }
 
-/// Chat session info: model/agent meta + context-window usage + the agent's
-/// live MEMORY.md (the "memory context" the agent carries into the chat).
+/// Chat session info: this-chat meta + context usage + agent-wide MEMORY.md
+/// (shared across all chats of the same agent folder — not the chat transcript).
 class _ChatInfoDialog extends ConsumerStatefulWidget {
   const _ChatInfoDialog({required this.jid, required this.title});
   final String jid;
@@ -1498,7 +1498,14 @@ class _ChatInfoDialogState extends ConsumerState<_ChatInfoDialog> {
               child: ListView(
                 padding: const EdgeInsets.all(AppTokens.s16),
                 children: [
-                  // Session meta.
+                  // Session meta — this chat only (not agent-wide memory).
+                  Text(context.tr('THIS CHAT'),
+                      style: TextStyle(
+                          color: c.textMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5)),
+                  const SizedBox(height: AppTokens.s8),
                   _row('Name', widget.title, c.textMuted),
                   _row('Agent', _folder?.isEmpty ?? true ? '—' : _folder!,
                       c.textMuted),
@@ -1509,14 +1516,24 @@ class _ChatInfoDialogState extends ConsumerState<_ChatInfoDialog> {
                           : _modelId!,
                       c.textMuted),
                   _row('JID', widget.jid, c.textMuted),
+                  const SizedBox(height: AppTokens.s8),
+                  Text(
+                      context.tr(
+                          'Transcript of this chat is stored separately from agent MEMORY.md. Clearing messages does not erase agent memory.'),
+                      style: TextStyle(color: c.textMuted, fontSize: 11)),
                   const SizedBox(height: AppTokens.s16),
                   // Context length.
-                  Text(context.tr('CONTEXT LENGTH'),
+                  Text(context.tr('CONTEXT USAGE'),
                       style: TextStyle(
                           color: c.textMuted,
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.5)),
+                  const SizedBox(height: AppTokens.s4),
+                  Text(
+                      context.tr(
+                          'Includes system prompt, tools, SOUL, memory recall, and recent turns — not only visible chat messages.'),
+                      style: TextStyle(color: c.textMuted, fontSize: 11)),
                   const SizedBox(height: AppTokens.s8),
                   if (u != null && u.maxTokens > 0) ...[
                     ClipRRect(
@@ -1554,9 +1571,11 @@ class _ChatInfoDialogState extends ConsumerState<_ChatInfoDialog> {
                     alignment: Alignment.centerLeft,
                     child: OutlinedButton.icon(
                       onPressed: () async {
-                        await ref
-                            .read(apiClientProvider)
-                            .post('/api/groups/${widget.jid}/compact');
+                        ref.read(wsClientProvider).send({
+                          'type': 'agent:control',
+                          'groupJid': widget.jid,
+                          'action': 'compact',
+                        });
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -1571,16 +1590,18 @@ class _ChatInfoDialogState extends ConsumerState<_ChatInfoDialog> {
                     ),
                   ),
                   const SizedBox(height: AppTokens.s20),
-                  // Memory context — editable MEMORY.md for this session's agent.
+                  // Agent-wide long-term memory — shared across all chats of this agent.
                   Row(
                     children: [
-                      Text(context.tr('MEMORY CONTEXT (MEMORY.md)'),
-                          style: TextStyle(
-                              color: c.textMuted,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.5)),
-                      const Spacer(),
+                      Flexible(
+                        child: Text(
+                            context.tr('AGENT MEMORY (MEMORY.md — shared)'),
+                            style: TextStyle(
+                                color: c.textMuted,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5)),
+                      ),
                       if (_memDirty && !_savingMem)
                         TextButton.icon(
                           onPressed: _saveMemory,
@@ -1600,6 +1621,11 @@ class _ChatInfoDialogState extends ConsumerState<_ChatInfoDialog> {
                         ),
                     ],
                   ),
+                  const SizedBox(height: AppTokens.s4),
+                  Text(
+                      context.tr(
+                          'Long-term notes for this agent folder — shared by every chat bound to the same agent, not unique to this JID.'),
+                      style: TextStyle(color: c.textMuted, fontSize: 11)),
                   const SizedBox(height: AppTokens.s8),
                   if (_loadingMem)
                     const Center(child: CircularProgressIndicator())
@@ -1664,7 +1690,7 @@ class _ChatInfoDialogState extends ConsumerState<_ChatInfoDialog> {
                   Text(
                       context.tr('Stops the agent and permanently deletes '
                           'every message, tool log, and chat event of this '
-                          'session.'),
+                          'session. Agent MEMORY.md is kept.'),
                       style: TextStyle(color: c.textMuted, fontSize: 11)),
                 ],
               ),

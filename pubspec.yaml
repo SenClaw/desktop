@@ -101,8 +101,7 @@ flutter:
     - assets/mermaid/index.html
     - assets/mermaid/mermaid.min.js
     - assets/tray_icon.png
-    - assets/tray_icon.ico
-    - assets/tray_icon_white.ico
+    - assets/app_icon.ico
     - assets/branding/senclaw_icon_1024.png
 
 # New SenClaw app icon (gradient squircle + claw slashes).

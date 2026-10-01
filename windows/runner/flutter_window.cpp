@@ -2,7 +2,33 @@
 
 #include <optional>
 
+#include <desktop_multi_window/desktop_multi_window_plugin.h>
+
 #include "flutter/generated_plugin_registrant.h"
+#include "resource.h"
+
+namespace {
+
+// desktop_multi_window registers its sub-window class (the tray's mini chat)
+// with the stock IDI_APPLICATION icon. Give those windows the SenClaw icon so
+// every window, the taskbar and the tray show the same one.
+void UseAppIconForSubWindow(void* controller) {
+  auto* view_controller =
+      reinterpret_cast<flutter::FlutterViewController*>(controller);
+  HWND window =
+      GetAncestor(view_controller->view()->GetNativeWindow(), GA_ROOT);
+  HINSTANCE instance = GetModuleHandle(nullptr);
+  HICON large_icon = static_cast<HICON>(LoadImage(
+      instance, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON,
+      GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), 0));
+  HICON small_icon = static_cast<HICON>(LoadImage(
+      instance, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON,
+      GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0));
+  if (large_icon) SendMessage(window, WM_SETICON, ICON_BIG, (LPARAM)large_icon);
+  if (small_icon) SendMessage(window, WM_SETICON, ICON_SMALL, (LPARAM)small_icon);
+}
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -25,6 +51,7 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  DesktopMultiWindowSetWindowCreatedCallback(UseAppIconForSubWindow);
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {

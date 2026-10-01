@@ -447,10 +447,8 @@ class _ModelRow extends StatelessWidget {
               Text(m.id, style: meta),
               if (repo != null)
                 InkWell(
-                  onTap: () => launchUrl(
-                      Uri.parse('https://huggingface.co/$repo/tree/${m.revision ?? 'main'}'),
-                      mode: LaunchMode.externalApplication),
-                  child: Text('$repo@${(m.revision ?? 'main').substring(0, (m.revision ?? 'main').length.clamp(0, 7))}',
+                  onTap: () => launchUrl(Uri.parse(m.sourcePage), mode: LaunchMode.externalApplication),
+                  child: Text('$repo@${m.revisionLabel}',
                       style: meta.copyWith(color: AppTokens.brand, decoration: TextDecoration.underline)),
                 ),
               if (m.sourcePath != null) Text(context.trArgs('from folder {path}', {'path': m.sourcePath!}), style: meta),

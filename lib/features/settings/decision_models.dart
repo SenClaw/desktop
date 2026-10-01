@@ -94,6 +94,7 @@ class LayaModel {
     required this.repo,
     required this.revision,
     required this.sourcePath,
+    required this.sourceUrl,
     required this.approxSizeMb,
     required this.sizeBytes,
     required this.installed,
@@ -116,6 +117,10 @@ class LayaModel {
   final String? repo;
   final String? revision;
   final String? sourcePath;
+
+  /// Where the files came from, as the runtime reports it (a Hub tree or a
+  /// GitHub release). Absent from older runtimes and installs — all Hub.
+  final String? sourceUrl;
   final int? approxSizeMb;
   final int sizeBytes;
   final bool installed;
@@ -123,6 +128,15 @@ class LayaModel {
   final LayaJob? job;
   final bool loading;
   final LayaLoaded? loaded;
+
+  /// The page for [repo]@[revision].
+  String get sourcePage => sourceUrl ?? 'https://huggingface.co/$repo/tree/${revision ?? 'main'}';
+
+  /// A commit sha shortens to 7 characters; a tag or branch reads whole.
+  String get revisionLabel {
+    final r = revision ?? 'main';
+    return RegExp(r'^[0-9a-f]{40}$').hasMatch(r) ? r.substring(0, 7) : r;
+  }
 
   bool get jobActive => job?.active ?? false;
 
@@ -141,6 +155,7 @@ class LayaModel {
       repo: _str(source['repo']),
       revision: _str(source['revision']),
       sourcePath: _str(source['path']),
+      sourceUrl: _str(source['url']),
       approxSizeMb: j['approx_size_mb'] is num ? (j['approx_size_mb'] as num).toInt() : null,
       sizeBytes: _int(j['size_bytes']),
       installed: j['installed'] == true,

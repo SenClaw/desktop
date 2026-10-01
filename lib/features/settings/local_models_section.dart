@@ -20,6 +20,10 @@ import 'decision_widgets.dart';
 import 'runtime_models.dart' show RuntimeCandidate, RuntimeProcessInfo;
 import 'settings_screen.dart' show SettingsBody;
 
+/// TurboFieldfareRepack's only source. Must match `SupportedModelSource`.
+const _gturboRepo = 'mlx-community/gemma-4-26b-a4b-it-4bit';
+const _gturboRevision = '0d77464eeb233a2da68ebf9d7dc4edaac7db956d';
+
 Map<String, dynamic> _asMap(dynamic v) => v is Map ? v.cast<String, dynamic>() : {};
 List<Map<String, dynamic>> _asMapList(dynamic v) => (v as List? ?? const [])
     .whereType<Map>()
@@ -306,6 +310,22 @@ class _LocalModelsSectionState extends ConsumerState<LocalModelsSection> {
     }
   }
 
+  Future<void> _downloadGturbo({bool vision = false}) async {
+    try {
+      await ref.read(apiClientProvider).post('/api/local-models/download', body: {
+        'format': 'gturbo',
+        'repo': _gturboRepo,
+        'revision': _gturboRevision,
+        if (vision) 'vision': true,
+      });
+      ref.invalidate(localModelsProvider);
+    } on ApiException catch (e) {
+      _toast(e.message);
+    } catch (e) {
+      _toast('$e');
+    }
+  }
+
   Future<void> _openDownloadDialog() async {
     final started =
         await showDialog<bool>(context: context, builder: (_) => const DownloadModelDialog());
@@ -348,6 +368,31 @@ class _LocalModelsSectionState extends ConsumerState<LocalModelsSection> {
                       icon: const Icon(Icons.download, size: 16),
                       label: Text(context.tr('Download')),
                     ),
+                  ],
+                ),
+                const SizedBox(height: AppTokens.s8),
+                Text(
+                  context.tr(
+                    'TurboFieldfare runs only Gemma 4 26B-A4B IT 4-bit. Download repacks that checkpoint into a .gturbo directory (about 14.3 GB).',
+                  ),
+                  style: TextStyle(color: c.textMuted, fontSize: 12),
+                ),
+                const SizedBox(height: AppTokens.s8),
+                Wrap(
+                  spacing: AppTokens.s8,
+                  runSpacing: AppTokens.s8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _downloadGturbo(),
+                      icon: const Icon(Icons.memory, size: 16),
+                      label: Text(context.tr('Download Gemma 4')),
+                    ),
+                    if (data.models.any((m) => m.format == 'gturbo' && !m.vision))
+                      OutlinedButton.icon(
+                        onPressed: () => _downloadGturbo(vision: true),
+                        icon: const Icon(Icons.image_outlined, size: 16),
+                        label: Text(context.tr('Download image pack')),
+                      ),
                   ],
                 ),
                 const SizedBox(height: AppTokens.s12),
@@ -666,10 +711,13 @@ class _DownloadModelDialogState extends ConsumerState<DownloadModelDialog> {
       _error = null;
     });
     try {
+      final pinned = repo.toLowerCase() == _gturboRepo && _format != 'gguf';
       await ref.read(apiClientProvider).post('/api/local-models/download', body: {
         'repo': repo,
-        if (_format == 'gguf') 'file': _selectedFile,
-        if (_selectedMmproj != null) 'mmproj': _selectedMmproj,
+        if (pinned) 'format': 'gturbo',
+        if (pinned) 'revision': _gturboRevision,
+        if (!pinned && _format == 'gguf') 'file': _selectedFile,
+        if (!pinned && _selectedMmproj != null) 'mmproj': _selectedMmproj,
       });
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
@@ -718,7 +766,15 @@ class _DownloadModelDialogState extends ConsumerState<DownloadModelDialog> {
               const SizedBox(height: AppTokens.s12),
               const LinearProgressIndicator(),
             ],
-            if (_format == 'mlx') ...[
+            if (_format == 'mlx' && _repo.text.trim().toLowerCase() == _gturboRepo) ...[
+              const SizedBox(height: AppTokens.s12),
+              Text(
+                context.tr(
+                  'This repo is the TurboFieldfare source. SenClaw repacks the pinned revision into a .gturbo directory instead of saving the raw MLX snapshot.',
+                ),
+                style: TextStyle(color: c.textMuted, fontSize: 12),
+              ),
+            ] else if (_format == 'mlx') ...[
               const SizedBox(height: AppTokens.s12),
               Text(context.tr('MLX snapshot — the whole repo is downloaded.'),
                   style: TextStyle(color: c.textMuted, fontSize: 12)),

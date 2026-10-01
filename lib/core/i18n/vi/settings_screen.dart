@@ -490,6 +490,12 @@ const Map<String, String> viSettingsScreen = {
   'Embedding config saved': 'Đã lưu cấu hình embedding',
   'Save failed: {e}': 'Lưu thất bại: {e}',
   'Local models': 'Model cục bộ',
+  'Download Gemma 4': 'Tải Gemma 4',
+  'Download image pack': 'Tải gói ảnh',
+  'TurboFieldfare runs only Gemma 4 26B-A4B IT 4-bit. Download repacks that checkpoint into a .gturbo directory (about 14.3 GB).':
+      'TurboFieldfare chỉ chạy Gemma 4 26B-A4B IT 4-bit. Lần tải sẽ đóng gói đúng checkpoint đó thành thư mục .gturbo (khoảng 14,3 GB).',
+  'This repo is the TurboFieldfare source. SenClaw repacks the pinned revision into a .gturbo directory instead of saving the raw MLX snapshot.':
+      'Repo này là nguồn của TurboFieldfare. SenClaw đóng gói đúng revision đã ghim thành thư mục .gturbo, không lưu bản MLX thô.',
   'Installed': 'Đã cài',
   'Downloading model…': 'Đang tải model…',
 

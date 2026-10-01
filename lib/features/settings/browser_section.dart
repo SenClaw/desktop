@@ -23,6 +23,8 @@ import '../../theme/tokens.dart';
 import '../../widgets/runtime_missing_banner.dart';
 import '../chat/new_chat_dialog.dart' show llmConfigsProvider, LlmConfig;
 import 'browser_models.dart';
+import 'decision_models.dart' show LayaModel, LayaModelList;
+import 'decision_section.dart' show decisionModelsProvider;
 import 'decision_widgets.dart';
 import 'settings_screen.dart' show SettingsBody;
 
@@ -101,21 +103,168 @@ class _EngineStatusCard extends ConsumerWidget {
           ],
           if (view.engine == 'v2' && (view.decisionModel?.missing ?? false)) ...[
             const SizedBox(height: AppTokens.s12),
-            decisionNotice(
-              context,
-              '${context.tr('The decision model is not installed:')} ${view.decisionModel!.id}. '
-              '${context.tr('Every browser step is then chosen by the chat model: seconds per step instead of a fraction of one.')}',
-              tone: AppTokens.warning,
-            ),
-            const SizedBox(height: AppTokens.s8),
-            OutlinedButton.icon(
-              onPressed: () => openDecisionSettings(context, ref),
-              icon: const Icon(Icons.alt_route, size: 16),
-              label: Text(context.tr('Open Decision settings')),
-            ),
+            _DecisionModelNotice(id: view.decisionModel!.id),
           ],
         ],
       ),
+    );
+  }
+}
+
+/// The browser engine's decision checkpoint is not on disk. When the decision
+/// runtime's catalog has it, it downloads from here — progress polled every
+/// second while the download runs — and the notice goes once it is
+/// installed; otherwise it points to Settings → Decision, where a model is
+/// imported.
+class _DecisionModelNotice extends ConsumerStatefulWidget {
+  const _DecisionModelNotice({required this.id});
+  final String id;
+
+  @override
+  ConsumerState<_DecisionModelNotice> createState() => _DecisionModelNoticeState();
+}
+
+class _DecisionModelNoticeState extends ConsumerState<_DecisionModelNotice> {
+  Timer? _poll;
+  bool _busy = false;
+
+  /// A download ran while this notice was open, so its end is news.
+  bool _watched = false;
+  late final ProviderSubscription<AsyncValue<LayaModelList>> _models;
+
+  @override
+  void initState() {
+    super.initState();
+    _models = ref.listenManual<AsyncValue<LayaModelList>>(
+      decisionModelsProvider,
+      (_, next) => _follow(_row(next.valueOrNull)),
+      fireImmediately: true,
+    );
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    _models.close();
+    super.dispose();
+  }
+
+  LayaModel? _row(LayaModelList? list) {
+    for (final m in list?.models ?? const <LayaModel>[]) {
+      if (m.id == widget.id) return m;
+    }
+    return null;
+  }
+
+  void _follow(LayaModel? m) {
+    final running = m?.jobActive ?? false;
+    if (running) _watched = true;
+    if (running && _poll == null) {
+      _poll = Timer.periodic(const Duration(seconds: 1), (_) => ref.invalidate(decisionModelsProvider));
+    } else if (!running && _poll != null) {
+      _poll!.cancel();
+      _poll = null;
+    }
+    if (m?.installed ?? false) {
+      if (_watched && mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(context.tr('The decision model is installed.'))));
+      }
+      // The settings view now says installed, and this notice goes with it.
+      ref.invalidate(browserSettingsProvider);
+    }
+  }
+
+  Future<void> _act(String action) async {
+    setState(() => _busy = true);
+    try {
+      await ref.read(apiClientProvider).post('/api/decision/models/${widget.id}/$action');
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+        ref.invalidate(decisionModelsProvider);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final async = ref.watch(decisionModelsProvider);
+    final runtimeMissing = async.hasError && runtimeMissingFrom(async.error!) != null;
+    final m = _row(async.valueOrNull);
+    final job = m?.job;
+    final running = job?.active ?? false;
+    final size = m?.approxSizeMb != null ? '~${decisionNum(context, m!.approxSizeMb! / 1024)} GB' : null;
+    final meta = TextStyle(color: c.textMuted, fontSize: 12);
+
+    Widget? action;
+    if (runtimeMissing) {
+      action = OutlinedButton.icon(
+        onPressed: () => openRuntimeSettings(context, ref),
+        icon: const Icon(Icons.settings_outlined, size: 16),
+        label: Text(context.tr('Open Runtime settings')),
+      );
+    } else if (m?.catalog ?? false) {
+      action = running
+          ? OutlinedButton.icon(
+              onPressed: _busy ? null : () => _act('cancel'),
+              icon: const Icon(Icons.close, size: 16),
+              label: Text(context.tr('Cancel')),
+            )
+          : FilledButton.icon(
+              onPressed: _busy ? null : () => _act('download'),
+              icon: const Icon(Icons.download, size: 16),
+              label: Text(job?.status == 'error'
+                  ? context.tr('Retry')
+                  : size == null
+                      ? context.tr('Download')
+                      : context.trArgs('Download ({size})', {'size': size})),
+            );
+    } else if (async.hasValue || async.hasError) {
+      action = OutlinedButton.icon(
+        onPressed: () => openDecisionSettings(context, ref),
+        icon: const Icon(Icons.alt_route, size: 16),
+        label: Text(context.tr('Open Decision settings')),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        decisionNotice(
+          context,
+          '${context.tr('The decision model is not installed:')} ${widget.id}. '
+          '${context.tr('Every browser step is then chosen by the chat model: seconds per step instead of a fraction of one.')}',
+          tone: AppTokens.warning,
+        ),
+        if (running) ...[
+          LinearProgressIndicator(value: job!.progress),
+          const SizedBox(height: AppTokens.s4),
+          Text(
+            job.status == 'verifying'
+                ? context.tr('Checking the downloaded files')
+                : job.totalBytes > 0
+                    ? '${decisionBytes(context, job.doneBytes)} / ${decisionBytes(context, job.totalBytes)}'
+                        '${job.currentFile != null ? ' · ${job.currentFile}' : ''}'
+                    : context.tr('Preparing the download'),
+            style: meta,
+          ),
+          const SizedBox(height: AppTokens.s8),
+        ],
+        if (job?.status == 'error' && job?.error != null) ...[
+          Text('${context.tr('The download failed:')} ${job!.error}',
+              style: const TextStyle(color: AppTokens.danger, fontSize: 12)),
+          const SizedBox(height: AppTokens.s8),
+        ],
+        if (runtimeMissing) ...[
+          Text(context.tr('The decision runtime is not installed.'), style: meta),
+          const SizedBox(height: AppTokens.s8),
+        ],
+        ?action,
+      ],
     );
   }
 }

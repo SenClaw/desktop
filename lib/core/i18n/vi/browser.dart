@@ -97,4 +97,13 @@ const Map<String, String> viBrowser = {
   'Press Enter': 'Nhấn Enter',
   'Confirm a dialog': 'Xác nhận hộp thoại',
   'Type text': 'Nhập chữ',
+
+  // Downloading the decision model. "Cancel", "Retry" and "Download" are
+  // shared keys in common.dart; "Open Runtime settings" lives in runtime.dart.
+  'Download ({size})': 'Tải về ({size})',
+  'Checking the downloaded files': 'Đang kiểm tra các file đã tải',
+  'Preparing the download': 'Đang chuẩn bị tải',
+  'The download failed:': 'Tải về thất bại:',
+  'The decision runtime is not installed.': 'Runtime quyết định (sen-sysone) chưa được cài.',
+  'The decision model is installed.': 'Đã cài xong mô hình quyết định.',
 };

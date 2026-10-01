@@ -51,10 +51,19 @@ class _FakeApi implements ApiClient {
     this.approvals = const [],
     this.approvalOutcome,
     this.approvalError,
+    this.decisionModels,
+    this.decisionModelsError,
   });
   final String engine;
   final bool runtimeInstalled;
-  final Map<String, dynamic>? decisionModel;
+  Map<String, dynamic>? decisionModel;
+
+  /// What `GET /api/decision/models` answers; a test changes it as a
+  /// download moves on.
+  Map<String, dynamic>? decisionModels;
+
+  /// When set, `GET /api/decision/models` throws this (a runtime-missing 503).
+  final ApiException? decisionModelsError;
   final List<Map<String, dynamic>> pending;
   final List<Map<String, dynamic>> paired;
   final Map<String, dynamic>? connected;
@@ -87,6 +96,9 @@ class _FakeApi implements ApiClient {
       '/api/browser-agent/extension' => {'connected': connected, 'pending': pending, 'paired': paired},
       '/api/browser-agent/tabs' => tabs ?? {'sessions': <Map<String, dynamic>>[], 'current': {}, 'extension': {}},
       '/api/browser-agent/approvals' => {'approvals': approvals},
+      '/api/decision/models' => decisionModelsError != null
+          ? throw decisionModelsError!
+          : decisionModels ?? <String, dynamic>{},
       '/api/llm-config' => {'configs': <Map<String, dynamic>>[]},
       _ => <String, dynamic>{},
     };
@@ -154,6 +166,29 @@ Map<String, dynamic> _approvalJson({
       'driver': driver,
       'url': url,
       'waiting_secs': waitingSecs,
+    };
+
+/// `GET /api/decision/models` listing the catalog's `laya-browser`.
+Map<String, dynamic> _models({Map<String, dynamic>? job, bool installed = false}) => {
+      'compiled': true,
+      'root': '/tmp/local-models/laya',
+      'models': [
+        {
+          'id': 'laya-browser',
+          'label': 'Laya Browser',
+          'description': '',
+          'kind': 'multilingual',
+          'catalog': true,
+          'source': {'type': 'catalog', 'repo': 'someone/laya-browser-onnx', 'revision': 'abc'},
+          'approx_size_mb': 1325,
+          'size_bytes': 0,
+          'installed': installed,
+          'path': '/tmp/local-models/laya/laya-browser',
+          'job': job,
+          'loading': false,
+          'loaded': null,
+        },
+      ],
     };
 
 Future<_FakeApi> _pump(WidgetTester tester, {_FakeApi? api}) async {
@@ -329,6 +364,58 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.textContaining('The decision model is not installed: laya-browser'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Open Decision settings'), findsOneWidget);
+  });
+
+  testWidgets('a decision model the runtime offers downloads from the warning, which goes once it is installed',
+      (tester) async {
+    final api = _FakeApi(
+      engine: 'v2',
+      runtimeInstalled: true,
+      decisionModel: {'id': 'laya-browser', 'needed': true, 'installed': false},
+      decisionModels: _models(),
+    );
+    await _pump(tester, api: api);
+    final download = find.widgetWithText(FilledButton, 'Download (~1.29 GB)');
+    expect(download, findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Open Decision settings'), findsNothing);
+
+    api.decisionModels = _models(job: {
+      'kind': 'download',
+      'status': 'downloading',
+      'total_bytes': 1000,
+      'done_bytes': 250,
+      'current_file': 'laya.onnx.data',
+    });
+    await tester.tap(download);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(api.called('POST /api/decision/models/laya-browser/download'), isTrue);
+    expect(find.textContaining('laya.onnx.data'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Cancel'), findsOneWidget);
+
+    // Installed: the runtime and the settings both say so, and the warning goes.
+    api.decisionModels = _models(job: {'kind': 'download', 'status': 'done', 'total_bytes': 1000, 'done_bytes': 1000},
+        installed: true);
+    api.decisionModel = {'id': 'laya-browser', 'needed': true, 'installed': true};
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('The decision model is not installed'), findsNothing);
+    expect(find.text('The decision model is installed.'), findsOneWidget);
+  });
+
+  testWidgets('with no decision runtime to download from, the warning points to Runtime settings', (tester) async {
+    await _pump(
+      tester,
+      api: _FakeApi(
+        engine: 'v2',
+        runtimeInstalled: true,
+        decisionModel: const {'id': 'laya-browser', 'needed': true, 'installed': false},
+        decisionModelsError: ApiException(503, 'no decision runtime', code: 'runtime_not_installed', slot: 'decision'),
+      ),
+    );
+    expect(find.text('The decision runtime is not installed.'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Open Runtime settings'), findsOneWidget);
+    expect(find.textContaining('Download'), findsNothing, reason: 'nothing to download from');
   });
 
   testWidgets('an installed decision model, or the legacy engine, shows no such warning', (tester) async {

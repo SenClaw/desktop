@@ -211,6 +211,14 @@ class DaemonSupervisor extends ChangeNotifier {
     final proc = _proc;
     _proc = null;
     if (proc == null) return;
+    if (Platform.isWindows) {
+      // Windows has no SIGTERM — `kill` is TerminateProcess on the daemon
+      // alone, so its graceful shutdown never runs and its runtimes / Space
+      // Apps / MCP servers would survive with their ports. Take the tree.
+      try {
+        await Process.run('taskkill', ['/PID', '${proc.pid}', '/T', '/F']);
+      } catch (_) {}
+    }
     proc.kill(ProcessSignal.sigterm);
     // Escalate if it lingers.
     await Future.any([

@@ -37,8 +37,9 @@ Map<String, dynamic> _slSettings({bool enabled = false}) => {
 
 /// Serves `/api/claude-code/*` and `/api/sen-link/*`, recording what was sent.
 class _FakeApi implements ApiClient {
-  _FakeApi({this.installed = true, this.linkEnabled = false});
+  _FakeApi({this.installed = true, this.linkEnabled = false, this.hub = false});
   final bool installed;
+  final bool hub;
   bool linkEnabled;
   final calls = <(String, Object?)>[];
   List<Map<String, dynamic>> peers = [
@@ -103,7 +104,10 @@ class _FakeApi implements ApiClient {
   @override
   Future<dynamic> post(String path, {Object? body, Duration? timeout}) async {
     calls.add(('POST $path', body));
-    if (path == '/api/sen-link/invites') return {'code': 'K7MQ2XRP', 'expiresAt': 1791600000, 'url': null};
+    if (path == '/api/sen-link/invites') {
+      return {'code': 'K7MQ2XRP', 'expiresAt': 1791600000, 'url': null, 'connect': hub ? 'senlink:eyJodWIiOiJodHRw' : null};
+    }
+    if (path == '/api/sen-link/peers/pair') return {...peers.first, 'name': 'SenClaw C', 'viaRelay': true};
     return <String, dynamic>{};
   }
 
@@ -195,6 +199,21 @@ void main() {
     await tester.tap(find.byKey(const Key('sl-invite')));
     await tester.pumpAndSettle();
     expect(find.text('K7MQ2XRP'), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('sen-link: a hub invite shows its connection string, and one pairs a peer', (tester) async {
+    final fake = _FakeApi(linkEnabled: true, hub: true);
+    await _pump(tester, fake, const SenLinkSection());
+    await tester.tap(find.byKey(const Key('sl-invite')));
+    await tester.pumpAndSettle();
+    expect(find.text('senlink:eyJodWIiOiJodHRw'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('sl-connect')), 'senlink:abc');
+    await tester.tap(find.byKey(const Key('sl-pair-hub')));
+    await tester.pumpAndSettle();
+    final pair = fake.calls.lastWhere((c) => c.$1 == 'POST /api/sen-link/peers/pair');
+    expect(pair.$2, {'connect': 'senlink:abc'});
     await _unmount(tester);
   });
 

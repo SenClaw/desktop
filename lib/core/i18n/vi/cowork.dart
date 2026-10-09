@@ -110,4 +110,12 @@ const Map<String, String> viCowork = {
       'dùng một lần trên SenClaw kia',
   'valid until':
       'hiệu lực đến',
+  'Hub URL':
+      'URL hub',
+  'A SenClaw hub for peers that cannot reach each other directly (NAT). Each invite then gets its own encrypted hub channel.':
+      'Hub SenClaw cho các peer không gọi trực tiếp được nhau (NAT). Khi đó mỗi lời mời có một kênh hub mã hoá riêng.',
+  '…or paste a senlink: connection string (hub invite)':
+      '…hoặc dán chuỗi kết nối senlink: (lời mời qua hub)',
+  'Pair via hub':
+      'Ghép nối qua hub',
 };

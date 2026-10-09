@@ -28,7 +28,7 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
   String? _loadError;
   bool _saving = false;
   bool _enabled = false;
-  ({String code, int expiresAt})? _invite;
+  ({String code, int expiresAt, String? connect})? _invite;
   String? _openPeer;
   List<Map<String, dynamic>>? _peerTasks;
   String? _peerTasksError;
@@ -39,12 +39,14 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
   final _board = TextEditingController();
   final _workspace = TextEditingController();
   final _assignee = TextEditingController();
+  final _hub = TextEditingController();
   final _pairUrl = TextEditingController();
   final _pairCode = TextEditingController();
+  final _connect = TextEditingController();
 
   @override
   void dispose() {
-    for (final c in [_name, _url, _desc, _board, _workspace, _assignee, _pairUrl, _pairCode]) {
+    for (final c in [_name, _url, _desc, _board, _workspace, _assignee, _hub, _pairUrl, _pairCode, _connect]) {
       c.dispose();
     }
     super.dispose();
@@ -85,6 +87,7 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
     _board.text = '${s['boardTitle'] ?? 'sen-link'}';
     _workspace.text = '${s['workspaceDir'] ?? ''}';
     _assignee.text = '${s['defaultAssignee'] ?? ''}';
+    _hub.text = '${s['hubUrl'] ?? ''}';
   }
 
   Future<void> _save() async {
@@ -102,6 +105,7 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
         'boardTitle': _board.text.trim(),
         'workspaceDir': orNull(_workspace.text),
         'defaultAssignee': orNull(_assignee.text),
+        'hubUrl': orNull(_hub.text),
       }) as Map)
           .cast<String, dynamic>();
       if (mounted) setState(() => _apply(s));
@@ -116,18 +120,28 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
   Future<void> _createInvite() async {
     try {
       final r = (await ref.read(apiClientProvider).post('/api/sen-link/invites') as Map);
-      if (mounted) setState(() => _invite = (code: '${r['code']}', expiresAt: (r['expiresAt'] as num).toInt()));
+      if (mounted) {
+        setState(() => _invite = (
+              code: '${r['code']}',
+              expiresAt: (r['expiresAt'] as num).toInt(),
+              connect: r['connect'] as String?,
+            ));
+      }
     } catch (e) {
       _snack(_err(e));
     }
   }
 
-  Future<void> _pair() async {
+  /// Pair directly (URL + code) or, with [viaHub], by a `senlink:` string.
+  Future<void> _pair({bool viaHub = false}) async {
     final pairedWith = context.tr('Paired with');
+    final body = viaHub
+        ? {'connect': _connect.text.trim()}
+        : {'url': _pairUrl.text.trim(), 'code': _pairCode.text.trim()};
     try {
-      final p = (await ref.read(apiClientProvider)
-          .post('/api/sen-link/peers/pair', body: {'url': _pairUrl.text.trim(), 'code': _pairCode.text.trim()}) as Map);
+      final p = (await ref.read(apiClientProvider).post('/api/sen-link/peers/pair', body: body) as Map);
       _pairCode.clear();
+      _connect.clear();
       _snack('$pairedWith ${p['name']}');
       await _load();
     } catch (e) {
@@ -266,6 +280,10 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
                   label: context.tr('Public URL'),
                   help: context.tr('How peers reach this daemon, e.g. a Tailscale address. The daemon must be bound beyond loopback (Settings → General → Network access).'),
                   child: TextField(controller: _url, decoration: const InputDecoration(hintText: 'http://100.64.0.2:18788', isDense: true))),
+              coworkField(context,
+                  label: context.tr('Hub URL'),
+                  help: context.tr('A SenClaw hub for peers that cannot reach each other directly (NAT). Each invite then gets its own encrypted hub channel.'),
+                  child: TextField(key: const Key('sl-hub'), controller: _hub, decoration: const InputDecoration(hintText: 'https://hub.example.com', isDense: true))),
               coworkField(context, label: context.tr('Description'), child: TextField(controller: _desc, decoration: const InputDecoration(isDense: true))),
               Wrap(spacing: AppTokens.s16, children: [
                 SizedBox(width: 200, child: coworkField(context, label: context.tr('Board for incoming tasks'), child: TextField(controller: _board, decoration: const InputDecoration(isDense: true)))),
@@ -291,7 +309,17 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
                   onPressed: _settings?['enabled'] == true ? _createInvite : null,
                   child: Text(context.tr('Create invite code')),
                 ),
-                if (_invite != null) ...[
+                if (_invite?.connect != null) ...[
+                  const SizedBox(width: AppTokens.s12),
+                  Expanded(
+                    child: SelectableText(_invite!.connect!,
+                        maxLines: 2, style: TextStyle(fontFamily: AppTokens.fontMono, fontSize: 12, color: c.textPrimary)),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.copy, size: 16),
+                    onPressed: () => Clipboard.setData(ClipboardData(text: _invite!.connect!)),
+                  ),
+                ] else if (_invite != null) ...[
                   const SizedBox(width: AppTokens.s12),
                   SelectableText(_invite!.code,
                       style: TextStyle(fontFamily: AppTokens.fontMono, fontSize: 18, color: c.textPrimary)),
@@ -321,6 +349,21 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
                   label: Text(context.tr('Pair')),
                 ),
               ]),
+              const SizedBox(height: AppTokens.s8),
+              Wrap(spacing: AppTokens.s8, runSpacing: AppTokens.s8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                SizedBox(
+                    width: 470,
+                    child: TextField(
+                        key: const Key('sl-connect'),
+                        controller: _connect,
+                        decoration: InputDecoration(hintText: context.tr('…or paste a senlink: connection string (hub invite)'), isDense: true))),
+                OutlinedButton.icon(
+                  key: const Key('sl-pair-hub'),
+                  onPressed: _settings?['enabled'] == true ? () => _pair(viaHub: true) : null,
+                  icon: const Icon(Icons.hub_outlined, size: 16),
+                  label: Text(context.tr('Pair via hub')),
+                ),
+              ]),
             ]),
           ),
           coworkCard(
@@ -344,7 +387,7 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('${p['name']}', style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w600)),
-            Text('${p['url'] ?? '—'}', style: TextStyle(color: c.textMuted, fontSize: 12)),
+            Text(p['viaRelay'] == true ? 'hub' : '${p['url'] ?? '—'}', style: TextStyle(color: c.textMuted, fontSize: 12)),
           ]),
         ),
         Text(context.tr('Their tasks run'), style: TextStyle(color: c.textMuted, fontSize: 12)),

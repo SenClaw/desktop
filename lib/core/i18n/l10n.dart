@@ -8,6 +8,7 @@ import 'vi/chat_misc.dart';
 import 'vi/chat_widgets.dart';
 import 'vi/cognitive_wiki.dart';
 import 'vi/common.dart';
+import 'vi/cowork.dart';
 import 'vi/dashboard_usage.dart';
 import 'vi/decision.dart';
 import 'vi/dock_cowork.dart';
@@ -46,6 +47,7 @@ class L10n {
     ...viSettingsMisc,
     ...viDecision,
     ...viBrowser,
+    ...viCowork,
     ...viRuntime,
     ...viPluginsScreen,
     ...viPluginsMisc,

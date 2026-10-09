@@ -29,6 +29,8 @@ import '../../theme/theme_mode_provider.dart';
 import '../../theme/tokens.dart';
 import 'pairing_section.dart';
 import 'browser_section.dart';
+import 'claude_code_section.dart';
+import 'sen_link_section.dart';
 import 'decision_section.dart';
 import 'local_models_section.dart';
 import 'lsp_section.dart';
@@ -65,6 +67,8 @@ const _sections = [
   ('ocr', 'OCR', Icons.document_scanner_outlined),
   ('decision', 'Decision (Laya)', Icons.alt_route),
   ('browser', 'Browser', Icons.web_outlined),
+  ('claude-code', 'Claude Code', Icons.smart_toy_outlined),
+  ('sen-link', 'sen-link', Icons.hub_outlined),
   ('runtime', 'Runtime', Icons.developer_board_outlined),
   ('local-models', 'Local models', Icons.storage_outlined),
   ('updates', 'Updates', Icons.system_update_alt),
@@ -133,6 +137,8 @@ class SettingsScreen extends ConsumerWidget {
             'ocr' => const _MediaModelsSection(domain: 'ocr', title: 'OCR'),
             'decision' => const DecisionSection(),
             'browser' => const BrowserSection(),
+            'claude-code' => const ClaudeCodeSection(),
+            'sen-link' => const SenLinkSection(),
             'runtime' => const RuntimeSection(),
             'local-models' => const LocalModelsSection(),
             'updates' => const UpdatesSection(),

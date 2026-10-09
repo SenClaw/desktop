@@ -120,6 +120,7 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
   Future<void> _createInvite() async {
     try {
       final r = (await ref.read(apiClientProvider).post('/api/sen-link/invites') as Map);
+      if (r['warning'] != null) _snack('${r['warning']}');
       if (mounted) {
         setState(() => _invite = (
               code: '${r['code']}',

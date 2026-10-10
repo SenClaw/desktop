@@ -6,24 +6,8 @@ import 'package:senclaw_desktop/core/config/app_config.dart';
 import 'package:senclaw_desktop/core/i18n/l10n.dart';
 import 'package:senclaw_desktop/core/transport/api_client.dart';
 import 'package:senclaw_desktop/core/transport/connection.dart';
-import 'package:senclaw_desktop/features/settings/claude_code_section.dart';
 import 'package:senclaw_desktop/features/settings/sen_link_section.dart';
 import 'package:senclaw_desktop/theme/app_theme.dart';
-
-Map<String, dynamic> _ccSettings() => {
-      'binary': 'claude',
-      'model': null,
-      'permissionMode': 'acceptEdits',
-      'allowedTools': ['Bash', 'Read'],
-      'maxTurns': 80,
-      'maxBudgetUsd': 2.5,
-      'verifyCommand': null,
-      'verifyTimeoutSecs': 900,
-      'maxStopBlocks': 3,
-      'review': true,
-      'maxFixRounds': 2,
-      'mcpChatJid': null,
-    };
 
 Map<String, dynamic> _slSettings({bool enabled = false}) => {
       'enabled': enabled,
@@ -35,10 +19,9 @@ Map<String, dynamic> _slSettings({bool enabled = false}) => {
       'defaultAssignee': null,
     };
 
-/// Serves `/api/claude-code/*` and `/api/sen-link/*`, recording what was sent.
+/// Serves `/api/sen-link/*`, recording what was sent.
 class _FakeApi implements ApiClient {
-  _FakeApi({this.installed = true, this.linkEnabled = false, this.hub = false});
-  final bool installed;
+  _FakeApi({this.linkEnabled = false, this.hub = false});
   final bool hub;
   bool linkEnabled;
   final calls = <(String, Object?)>[];
@@ -64,23 +47,6 @@ class _FakeApi implements ApiClient {
   Future<dynamic> get(String path, {Map<String, dynamic>? query, Duration? timeout}) async {
     calls.add(('GET $path', null));
     return switch (path) {
-      '/api/claude-code/status' => {
-          'binary': 'claude',
-          'installed': installed,
-          'version': installed ? '2.1.243 (Claude Code)' : null,
-          'assignee': 'claude-code',
-          'mcp': {
-            'endpoints': ['http://127.0.0.1:18788/mcp/core'],
-            'tokenFile': '/home/u/.senclaw/api_token',
-            'addCommands': ['claude mcp add --transport http senclaw-core http://127.0.0.1:18788/mcp/core'],
-          },
-        },
-      '/api/claude-code/settings' => _ccSettings(),
-      '/api/claude-code/runs' => {
-          'runs': [
-            {'runId': 'r1', 'itemId': '7', 'phase': 'blocked', 'lastActivity': 'tool: Bash', 'costUsd': 0.42, 'fixRound': 2},
-          ]
-        },
       '/api/sen-link/status' => {'settings': _slSettings(enabled: linkEnabled), 'agentCard': {}, 'peerCount': peers.length},
       '/api/sen-link/peers' => {'peers': peers},
       _ => <String, dynamic>{},
@@ -143,36 +109,10 @@ Future<void> _pump(WidgetTester tester, _FakeApi fake, Widget section) async {
   await tester.pumpAndSettle();
 }
 
-/// Unmount so the section's poll timer is cancelled before the test ends.
+/// Unmount at the end of each test.
 Future<void> _unmount(WidgetTester tester) => tester.pumpWidget(const SizedBox());
 
 void main() {
-  testWidgets('Claude Code: status, MCP commands, runs, and a save that keeps hidden fields', (tester) async {
-    final fake = _FakeApi();
-    await _pump(tester, fake, const ClaudeCodeSection());
-    expect(tester.takeException(), isNull);
-    expect(find.textContaining('2.1.243 (Claude Code)'), findsOneWidget);
-    expect(find.textContaining('claude mcp add --transport http senclaw-core'), findsOneWidget);
-    expect(find.text('#7'), findsOneWidget);
-    expect(find.text('blocked'), findsOneWidget);
-
-    await tester.enterText(find.byKey(const Key('cc-verify')), 'cargo test');
-    await tester.tap(find.byKey(const Key('cc-save')));
-    await tester.pumpAndSettle();
-    final put = fake.calls.lastWhere((c) => c.$1 == 'PUT /api/claude-code/settings').$2 as Map;
-    expect(put['verifyCommand'], 'cargo test');
-    // Not on the form, still sent back unchanged (PUT replaces the block).
-    expect(put['maxBudgetUsd'], 2.5);
-    expect(put['maxStopBlocks'], 3);
-    await _unmount(tester);
-  });
-
-  testWidgets('Claude Code: a missing binary says how to install it', (tester) async {
-    await _pump(tester, _FakeApi(installed: false), const ClaudeCodeSection());
-    expect(find.textContaining('Install Claude Code'), findsOneWidget);
-    await _unmount(tester);
-  });
-
   testWidgets('sen-link: invites need sen-link on, and auto-run asks first', (tester) async {
     final fake = _FakeApi(linkEnabled: false);
     await _pump(tester, fake, const SenLinkSection());

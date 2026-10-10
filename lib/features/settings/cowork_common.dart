@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../theme/tokens.dart';
 
-// Building blocks shared by Settings → Claude Code and Settings → sen-link,
-// in the same visual language as the other settings sections.
+// Building blocks for Settings → sen-link, in the same visual language as the
+// other settings sections.
 
 /// A titled settings card.
 Widget coworkCard(BuildContext context,

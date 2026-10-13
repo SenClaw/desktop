@@ -9,6 +9,7 @@ import 'vi/chat_widgets.dart';
 import 'vi/cognitive_wiki.dart';
 import 'vi/common.dart';
 import 'vi/cowork.dart';
+import 'vi/datagen.dart';
 import 'vi/dashboard_usage.dart';
 import 'vi/decision.dart';
 import 'vi/dock_cowork.dart';
@@ -57,6 +58,7 @@ class L10n {
     ...viSpace,
     ...viWorkflow,
     ...viBackground,
+    ...viDatagen,
     ...viKanban,
     ...viDashboardUsage,
     ...viCognitiveWiki,

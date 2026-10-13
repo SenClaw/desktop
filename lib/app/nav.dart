@@ -28,6 +28,8 @@ const navSections = <NavSection>[
   // badge) is taken by the System theme for the same reason — avoid that whole
   // family.
   NavSection('/background', 'Background', Icons.pending_actions),
+  // Dataset-generation jobs. Also something you check on rather than work in.
+  NavSection('/datagen', 'Datagen', Icons.science_outlined),
   // Token accounting. Sits with Background/Settings: it is something you
   // check on (spend), not something you work in.
   NavSection('/usage', 'Usage', Icons.bar_chart_outlined),

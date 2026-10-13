@@ -1,0 +1,70 @@
+/// Vietnamese strings for the Datagen screen. English string = key. The same
+/// sentences as the web page's `vi.web.json` entries, so both clients read
+/// alike.
+const Map<String, String> viDatagen = {
+  // ── header + lists ──────────────────────────────────────────────────────────
+  'Datagen': 'Sinh dữ liệu',
+  'Datasets built in the background': 'Dataset được tạo trong nền',
+  'New job': 'Job mới',
+  'Jobs in this daemon run': 'Job trong lần chạy daemon này',
+  'Datasets': 'Dataset',
+  'No datasets yet': 'Chưa có dataset nào',
+  'View records': 'Xem bản ghi',
+  'Delete this dataset?': 'Xoá dataset này?',
+  'No records': 'Không có bản ghi',
+  'Previous': 'Trước',
+  '{from}–{to} of {total}': '{from}–{to} trên {total}',
+  'LLM calls: {n}/{max}': 'Lượt gọi LLM: {n}/{max}',
+  'Rejected: {r}': 'Bị loại: {r}',
+  // Pipeline names (shown through a variable).
+  'expand_seeds': 'Mở rộng câu mẫu',
+  'doc_qa': 'Hỏi đáp từ tài liệu',
+  'reasoning_traces': 'Lời giải từng bước',
+  'executable_qa': 'Bài toán chạy code',
+  'export_logs': 'Xuất lịch sử chat',
+
+  // ── new job dialog ──────────────────────────────────────────────────────────
+  'New datagen job': 'Job sinh dữ liệu mới',
+  'Pipeline': 'Pipeline',
+  'Dataset name': 'Tên dataset',
+  'Empty uses the pipeline and the date.': 'Để trống thì dùng tên pipeline kèm ngày.',
+  'Example requests': 'Câu yêu cầu mẫu',
+  'One per line. Prefix a label with " | " to make a labelled set, e.g. "browser | find a cheap flight".':
+      'Mỗi dòng một câu. Thêm nhãn phía trước bằng " | " để có bộ có nhãn, vd. "browser | tìm vé máy bay rẻ".',
+  'Label descriptions': 'Mô tả nhãn',
+  'Optional, one per line: "label: what it means".': 'Không bắt buộc, mỗi dòng một nhãn: "nhãn: ý nghĩa".',
+  'Mode': 'Chế độ',
+  'New requests': 'Câu yêu cầu mới',
+  'Evolve seeds': 'Biến đổi câu mẫu',
+  'Check labels': 'Kiểm nhãn',
+  'Target': 'Mục tiêu',
+  'Documents': 'Tài liệu',
+  'Paste text; separate documents with a line holding only ---.':
+      'Dán văn bản; ngăn cách các tài liệu bằng một dòng chỉ có ---.',
+  'Files or folders': 'File hoặc thư mục',
+  'Absolute paths of .md/.txt files or folders, one per line.':
+      'Đường dẫn tuyệt đối tới file .md/.txt hoặc thư mục, mỗi dòng một đường dẫn.',
+  'Pairs per passage': 'Số cặp mỗi đoạn',
+  'Multi-hop': 'Nhiều bước',
+  'Verify grounding': 'Kiểm tra căn cứ',
+  'Problems': 'Bài toán',
+  'One per line. Add the known answer after " || " to have it checked.':
+      'Mỗi dòng một bài. Thêm đáp án đã biết sau " || " để được kiểm tra.',
+  'Improvement rounds': 'Số vòng cải thiện',
+  'Empty solves every problem.': 'Để trống thì giải mọi bài.',
+  'Score threshold': 'Ngưỡng điểm',
+  'Example problems': 'Bài toán mẫu',
+  'One per line, optionally "question || answer". Generated programs run in the sandbox; the job refuses to start without an enforced one.':
+      'Mỗi dòng một bài, có thể kèm đáp án dạng "câu hỏi || đáp án". Chương trình sinh ra chạy trong sandbox; máy không có sandbox cách ly thật thì job sẽ không chạy.',
+  'Program timeout (ms)': 'Thời gian chạy tối đa (ms)',
+  'Chats': 'Chat',
+  'Chat ids, one per line, or * for every chat with recorded turns. Only chats with the trajectory turned on have any.':
+      'Mã chat, mỗi dòng một mã, hoặc * cho mọi chat có turn đã ghi. Chỉ chat đã bật trajectory mới có dữ liệu.',
+  'Format': 'Định dạng',
+  'Max records': 'Số bản ghi tối đa',
+  'Leave empty to write in the language of the input.': 'Để trống thì viết bằng ngôn ngữ của dữ liệu đầu vào.',
+  'Max LLM calls': 'Số lượt gọi LLM tối đa',
+  'Hard cap for the whole job. Empty uses the default.': 'Giới hạn cứng cho cả job. Để trống thì dùng mặc định.',
+  'Model profile': 'Cấu hình model',
+  'LLM config id or label. Empty uses the active model.': 'Id hoặc tên cấu hình LLM. Để trống thì dùng model đang chọn.',
+};

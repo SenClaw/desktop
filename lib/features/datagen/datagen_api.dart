@@ -148,6 +148,8 @@ class DatagenCatalogEntry {
     this.homepage,
     this.notice,
     this.dataset,
+    this.kit,
+    this.fromUrl = false,
   });
 
   final String id;
@@ -168,6 +170,12 @@ class DatagenCatalogEntry {
   /// The dataset an install wrote, when installed.
   final String? dataset;
 
+  /// The Zen Kit that registered this entry; `null` for SenClaw's own.
+  final String? kit;
+
+  /// Downloads a file from a URL rather than a Hugging Face split.
+  final bool fromUrl;
+
   factory DatagenCatalogEntry.fromJson(Map<String, dynamic> j) => DatagenCatalogEntry(
         id: '${j['id'] ?? ''}',
         title: '${j['title'] ?? ''}',
@@ -187,6 +195,8 @@ class DatagenCatalogEntry {
         homepage: j['homepage'] as String?,
         notice: j['notice'] as String?,
         dataset: j['dataset'] as String?,
+        kit: j['kit'] as String?,
+        fromUrl: (j['source'] as Map?)?['url'] is String,
       );
 }
 

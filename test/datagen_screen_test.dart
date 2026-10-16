@@ -104,6 +104,22 @@ class _FakeApi implements ApiClient {
       'installed': false,
     },
     {
+      'id': 'lab/router-eval',
+      'title': 'Router eval',
+      'description': 'A kit\'s own eval set',
+      'kind': 'labeled_text',
+      'lang': 'vi',
+      'rows': 0,
+      'license': 'MIT',
+      'attribution': 'Lab',
+      'source': {'url': 'https://example.org/eval.jsonl'},
+      'flags': <String, bool>{},
+      'needsConsent': false,
+      'bundled': false,
+      'installed': false,
+      'kit': 'lab',
+    },
+    {
       'id': 'gsm8k',
       'title': 'GSM8K',
       'description': '1.319 bài toán',
@@ -348,6 +364,7 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('XQuAD · tiếng Việt'), findsOneWidget);
     expect(find.text('Installed'), findsOneWidget);
+    expect(find.text('Kit · lab'), findsOneWidget, reason: 'an entry a kit registered says so');
 
     await tester.tap(find.widgetWithText(FilledButton, 'Download').last);
     await tester.pump();

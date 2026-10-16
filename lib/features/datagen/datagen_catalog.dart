@@ -152,7 +152,8 @@ class _CatalogCard extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(e.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-              _Tag(e.bundled ? context.tr('Bundled') : 'Hugging Face', e.bundled ? Colors.green : Colors.blue),
+              _Tag(e.bundled ? context.tr('Bundled') : (e.fromUrl ? 'URL' : 'Hugging Face'), e.bundled ? Colors.green : Colors.blue),
+          if (e.kit != null) _Tag('Kit · ${e.kit}', Colors.purple),
               _Tag(context.tr(e.kind), c.textSecondary),
               _Tag(e.lang, c.textSecondary),
               if (e.flags.contains('shareAlike')) const _Tag('BY-SA', Colors.orange),

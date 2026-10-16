@@ -9,13 +9,17 @@ import '../../core/transport/connection.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/section_scaffold.dart';
 import 'datagen_api.dart';
+import 'datagen_catalog.dart';
+import 'datagen_import_dialog.dart';
 import 'datagen_job_dialog.dart';
 
 /// Datagen — the daemon's dataset-generation jobs (`/api/datagen/*`).
 ///
 /// Same surface as the web page: start a job for any pipeline, watch it fill,
-/// cancel it, read what it wrote, delete a dataset. Polls only while a job is
-/// running, so an idle screen makes no requests.
+/// cancel it, read what it wrote, delete a dataset — and on "Source datasets",
+/// install a dataset people wrote from the catalog or import one from a file,
+/// a URL or Hugging Face, then use it as seeds or problems for a new job.
+/// Polls only while a job is running, so an idle screen makes no requests.
 class DatagenScreen extends ConsumerStatefulWidget {
   const DatagenScreen({super.key});
 
@@ -25,6 +29,7 @@ class DatagenScreen extends ConsumerStatefulWidget {
 
 class _DatagenScreenState extends ConsumerState<DatagenScreen> {
   Timer? _poll;
+  String _view = 'jobs';
 
   @override
   void dispose() {
@@ -54,6 +59,20 @@ class _DatagenScreenState extends ConsumerState<DatagenScreen> {
       _toast('$e');
     }
   }
+
+  /// Datasets a new job can read from: finished ones.
+  List<String> _readable() =>
+      ref.read(datagenOverviewProvider).valueOrNull?.datasets.where((d) => !d.running && d.state != 'failed').map((d) => d.name).toList() ??
+      const [];
+
+  /// Open the new-job dialog for `pipeline`, fed from dataset `name`.
+  Future<void> _useDataset(String name, String pipeline) async {
+    if (await showDatagenJobDialog(context, pipeline: pipeline, from: name, datasets: _readable()) == true) {
+      ref.invalidate(datagenOverviewProvider);
+    }
+  }
+
+  void _openRecords(String name) => showDialog<void>(context: context, builder: (_) => _RecordsDialog(name: name));
 
   Future<void> _delete(DatagenJob d) async {
     final ok = await showDialog<bool>(
@@ -95,11 +114,24 @@ class _DatagenScreenState extends ConsumerState<DatagenScreen> {
           onPressed: () => ref.invalidate(datagenOverviewProvider),
         ),
         const SizedBox(width: AppTokens.s8),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.file_upload_outlined, size: 16),
+          label: Text(context.tr('Import file / URL…')),
+          onPressed: () async {
+            if (await showDatagenImportDialog(context) == true) {
+              setState(() => _view = 'jobs');
+              ref.invalidate(datagenOverviewProvider);
+            }
+          },
+        ),
+        const SizedBox(width: AppTokens.s8),
         FilledButton.icon(
           icon: const Icon(Icons.add, size: 16),
           label: Text(context.tr('New job')),
           onPressed: () async {
-            if (await showDatagenJobDialog(context) == true) ref.invalidate(datagenOverviewProvider);
+            if (await showDatagenJobDialog(context, datasets: _readable()) == true) {
+              ref.invalidate(datagenOverviewProvider);
+            }
           },
         ),
       ],
@@ -114,6 +146,36 @@ class _DatagenScreenState extends ConsumerState<DatagenScreen> {
                 padding: const EdgeInsets.only(bottom: AppTokens.s12),
                 child: SelectableText(o.root, style: TextStyle(fontSize: 12, color: context.colors.textMuted)),
               ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SegmentedButton<String>(
+                segments: [
+                  ButtonSegment(value: 'jobs', label: Text(context.tr('Jobs & datasets'))),
+                  ButtonSegment(value: 'sources', label: Text(context.tr('Source datasets'))),
+                ],
+                selected: {_view},
+                showSelectedIcon: false,
+                onSelectionChanged: (v) => setState(() => _view = v.first),
+              ),
+            ),
+            const SizedBox(height: AppTokens.s16),
+            if (_view == 'sources') ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppTokens.s12),
+                child: Text(
+                  context.tr('Datasets written and labelled by people, ready to use as seeds or to measure with. '
+                      'Bundled ones install offline; the others download from Hugging Face when you install them.'),
+                  style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                ),
+              ),
+              DatagenCatalog(
+                entries: o.catalog,
+                jobs: o.jobs,
+                onView: _openRecords,
+                onUseAsSeeds: (n) => _useDataset(n, 'expand_seeds'),
+                onUseAsProblems: (n) => _useDataset(n, 'reasoning_traces'),
+              ),
+            ] else ...[
             if (o.jobs.isNotEmpty) ...[
               _Heading(context.tr('Jobs in this daemon run')),
               ...o.jobs.map((j) => _JobRow(
@@ -138,10 +200,17 @@ class _DatagenScreenState extends ConsumerState<DatagenScreen> {
               ...o.datasets.map((d) => _JobRow(
                     job: d,
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (!d.running && d.feedsSeeds)
+                        TextButton(
+                            onPressed: () => _useDataset(d.name, 'expand_seeds'), child: Text(context.tr('Use as seeds'))),
+                      if (!d.running && d.feedsProblems)
+                        TextButton(
+                            onPressed: () => _useDataset(d.name, 'reasoning_traces'),
+                            child: Text(context.tr('Use as problems'))),
                       IconButton(
                         tooltip: context.tr('View records'),
                         icon: const Icon(Icons.visibility_outlined, size: 18),
-                        onPressed: () => showDialog<void>(context: context, builder: (_) => _RecordsDialog(name: d.name)),
+                        onPressed: () => _openRecords(d.name),
                       ),
                       IconButton(
                         tooltip: context.tr('Delete'),
@@ -150,6 +219,7 @@ class _DatagenScreenState extends ConsumerState<DatagenScreen> {
                       ),
                     ]),
                   )),
+            ],
           ],
         ),
       ),
@@ -202,22 +272,23 @@ class _JobRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Wrap(spacing: AppTokens.s8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                Wrap(spacing: AppTokens.s8, runSpacing: AppTokens.s4, crossAxisAlignment: WrapCrossAlignment.center, children: [
                   Text(j.name, style: const TextStyle(fontWeight: FontWeight.w600)),
                   _Chip(context.tr(j.pipeline), c.textSecondary),
                   _Chip(context.tr(j.state), color),
+                  if (j.sourceLabel != null) _Chip(j.sourceLabel!, Colors.blue),
+                  if (j.license != null) _Chip(j.license!, c.textMuted),
                 ]),
                 const SizedBox(height: AppTokens.s8),
                 Row(children: [
                   SizedBox(
                     width: 180,
-                    child: LinearProgressIndicator(
-                      value: j.target > 0 ? (j.accepted / j.target).clamp(0, 1).toDouble() : 0,
-                      color: color,
-                    ),
+                    child: LinearProgressIndicator(value: j.progress, color: color),
                   ),
                   const SizedBox(width: AppTokens.s8),
-                  Text('${j.accepted}/${j.target}', style: TextStyle(fontSize: 12, color: c.textSecondary)),
+                  // An import's target is only a ceiling; its count is what it kept.
+                  Text(j.pipeline == 'import' ? context.trArgs('{n} rows', {'n': j.accepted}) : '${j.accepted}/${j.target}',
+                      style: TextStyle(fontSize: 12, color: c.textSecondary)),
                   if (j.maxLlmCalls > 0) ...[
                     const SizedBox(width: AppTokens.s12),
                     Text(

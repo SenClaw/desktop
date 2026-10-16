@@ -2,7 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/transport/connection.dart';
 
-/// The five pipelines the daemon runs (`../senclaw/docs/datagen.md`).
+/// The generating pipelines the new-job dialog offers
+/// (`../senclaw/docs/datagen.md`). `import` has its own dialog.
 const datagenPipelines = <String>[
   'expand_seeds',
   'doc_qa',
@@ -10,6 +11,15 @@ const datagenPipelines = <String>[
   'executable_qa',
   'export_logs',
 ];
+
+/// The record shapes an import normalises to, and each one's fields,
+/// required first — the daemon's `mapping::Kind::fields`.
+const datagenKindFields = <String, List<(String, bool)>>{
+  'labeled_text': [('text', true), ('label', false)],
+  'qa_context': [('question', true), ('answer', true), ('context', true)],
+  'problem_answer': [('problem', true), ('answer', false)],
+  'chat': [('user', true), ('assistant', true), ('system', false)],
+};
 
 /// One job or dataset manifest — the daemon serves both in this shape.
 class DatagenJob {
@@ -23,10 +33,12 @@ class DatagenJob {
     required this.llmCalls,
     required this.maxLlmCalls,
     required this.rejected,
+    this.attempts = 0,
     this.model,
     this.note,
     this.error,
     this.startedAt,
+    this.provenance,
   });
 
   final String jobId;
@@ -42,8 +54,53 @@ class DatagenJob {
   final String? note;
   final String? error;
   final int? startedAt;
+  final int attempts;
+
+  /// `import` only: where the records came from and under what license.
+  final Map<String, dynamic>? provenance;
 
   bool get running => state == 'running';
+
+  Map<String, dynamic>? get _source => provenance?['source'] as Map<String, dynamic>?;
+
+  /// The catalog entry an import came from.
+  String? get catalogId => _source?['catalog'] as String?;
+
+  String? get license => provenance?['license'] as String?;
+
+  String? get kind => provenance?['kind'] as String?;
+
+  /// "massive-vi", "openai/gsm8k · main · test", a URL's host, a file name.
+  String? get sourceLabel {
+    final s = _source;
+    if (s == null) return null;
+    if (s['catalog'] is String) return s['catalog'] as String;
+    switch (s['type']) {
+      case 'hf':
+        return [s['dataset'], s['config'], s['split']].whereType<String>().join(' · ');
+      case 'url':
+        return Uri.tryParse('${s['url'] ?? ''}')?.host ?? 'url';
+      default:
+        return (s['name'] ?? s['type']) as String?;
+    }
+  }
+
+  /// Can feed `expand_seeds` (labelled text, or a run of it).
+  bool get feedsSeeds => kind == 'labeled_text' || pipeline == 'expand_seeds';
+
+  /// Can feed `reasoning_traces` (problems, or a run of them).
+  bool get feedsProblems =>
+      kind == 'problem_answer' || pipeline == 'reasoning_traces' || pipeline == 'executable_qa';
+
+  /// Progress as 0–1. An import's target is a ceiling, not a goal: its
+  /// progress is the rows read out of the rows its source has.
+  double get progress {
+    if (pipeline != 'import') return target > 0 ? (accepted / target).clamp(0, 1).toDouble() : 0;
+    final rows = provenance?['sourceRows'];
+    final of = rows is num && rows > 0 ? (rows.toInt() < target ? rows.toInt() : target) : target;
+    if (!running) return 1;
+    return of > 0 ? (attempts / of).clamp(0, 1).toDouble() : 0;
+  }
 
   /// "3 duplicate, 1 too_long" — the reasons a run produced fewer records.
   String get rejectedText => rejected.entries.map((e) => '${e.value} ${e.key}').join(', ');
@@ -62,19 +119,83 @@ class DatagenJob {
       llmCalls: n(j['llmCalls']),
       maxLlmCalls: n(j['maxLlmCalls']),
       rejected: rej,
+      attempts: n(j['attempts']),
       model: j['model'] as String?,
       note: j['note'] as String?,
       error: j['error'] as String?,
       startedAt: j['startedAt'] is num ? (j['startedAt'] as num).toInt() : null,
+      provenance: j['provenance'] is Map ? Map<String, dynamic>.from(j['provenance'] as Map) : null,
     );
   }
 }
 
+/// One entry of `GET /api/datagen/catalog`: a dataset people wrote, ready to
+/// install as an `import` job.
+class DatagenCatalogEntry {
+  const DatagenCatalogEntry({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.kind,
+    required this.lang,
+    required this.rows,
+    required this.license,
+    required this.attribution,
+    required this.flags,
+    required this.needsConsent,
+    required this.bundled,
+    required this.installed,
+    this.homepage,
+    this.notice,
+    this.dataset,
+  });
+
+  final String id;
+  final String title;
+  final String description;
+  final String kind;
+  final String lang;
+  final int rows;
+  final String license;
+  final String attribution;
+  final Set<String> flags;
+  final bool needsConsent;
+  final bool bundled;
+  final bool installed;
+  final String? homepage;
+  final String? notice;
+
+  /// The dataset an install wrote, when installed.
+  final String? dataset;
+
+  factory DatagenCatalogEntry.fromJson(Map<String, dynamic> j) => DatagenCatalogEntry(
+        id: '${j['id'] ?? ''}',
+        title: '${j['title'] ?? ''}',
+        description: '${j['description'] ?? ''}',
+        kind: '${j['kind'] ?? ''}',
+        lang: '${j['lang'] ?? ''}',
+        rows: j['rows'] is num ? (j['rows'] as num).toInt() : 0,
+        license: '${j['license'] ?? ''}',
+        attribution: '${j['attribution'] ?? ''}',
+        flags: {
+          for (final e in ((j['flags'] as Map?) ?? const {}).entries)
+            if (e.value == true) '${e.key}',
+        },
+        needsConsent: j['needsConsent'] == true,
+        bundled: j['bundled'] == true,
+        installed: j['installed'] == true,
+        homepage: j['homepage'] as String?,
+        notice: j['notice'] as String?,
+        dataset: j['dataset'] as String?,
+      );
+}
+
 class DatagenOverview {
-  const DatagenOverview({required this.jobs, required this.datasets, required this.root});
+  const DatagenOverview({required this.jobs, required this.datasets, required this.root, this.catalog = const []});
   final List<DatagenJob> jobs;
   final List<DatagenJob> datasets;
   final String root;
+  final List<DatagenCatalogEntry> catalog;
 }
 
 List<DatagenJob> _list(dynamic body, String key) => ((body is Map ? body[key] : null) as List? ?? const [])
@@ -82,15 +203,24 @@ List<DatagenJob> _list(dynamic body, String key) => ((body is Map ? body[key] : 
     .map((m) => DatagenJob.fromJson(Map<String, dynamic>.from(m)))
     .toList();
 
-/// Jobs of this daemon run plus every dataset on disk. Not scoped to a chat:
-/// the per-chat scoping is for the agent's tools, not for the person.
+/// Jobs of this daemon run, every dataset on disk and the dataset catalog.
+/// Not scoped to a chat: the per-chat scoping is for the agent's tools, not
+/// for the person.
 final datagenOverviewProvider = FutureProvider.autoDispose<DatagenOverview>((ref) async {
   final api = ref.watch(apiClientProvider);
-  final results = await Future.wait([api.get('/api/datagen/jobs'), api.get('/api/datagen/datasets')]);
+  final results = await Future.wait([
+    api.get('/api/datagen/jobs'),
+    api.get('/api/datagen/datasets'),
+    api.get('/api/datagen/catalog'),
+  ]);
   return DatagenOverview(
     jobs: _list(results[0], 'jobs'),
     datasets: _list(results[1], 'datasets'),
     root: '${(results[1] as Map?)?['root'] ?? ''}',
+    catalog: ((results[2] is Map ? results[2]['entries'] : null) as List? ?? const [])
+        .whereType<Map>()
+        .map((m) => DatagenCatalogEntry.fromJson(Map<String, dynamic>.from(m)))
+        .toList(),
   );
 });
 
@@ -118,6 +248,14 @@ Map<String, dynamic> buildDatagenBody(String pipeline, Map<String, Object?> f) {
   int? num(Object? v) => v is int ? v : int.tryParse('${v ?? ''}'.trim());
   double? dec(Object? v) => v is double ? v : double.tryParse('${v ?? ''}'.trim());
 
+  /// A dataset picked instead of typed lines: `{dataset, perLabel?}`.
+  Map<String, dynamic>? from(String key) {
+    final name = '${f[key] ?? ''}'.trim();
+    if (name.isEmpty) return null;
+    final per = num(f['perLabel']);
+    return {'dataset': name, 'perLabel': ?per};
+  }
+
   put('name', f['name']);
   if (pipeline != 'export_logs') {
     put('language', f['language']);
@@ -126,10 +264,15 @@ Map<String, dynamic> buildDatagenBody(String pipeline, Map<String, Object?> f) {
   }
   switch (pipeline) {
     case 'expand_seeds':
-      body['seeds'] = _lines(f['seeds'] as String?).map((l) {
-        final (a, b) = _split(l, ' | ');
-        return b == null ? a : {'label': a, 'text': b};
-      }).toList();
+      final seedsFrom = from('seedsFrom');
+      if (seedsFrom != null) {
+        body['seedsFrom'] = seedsFrom;
+      } else {
+        body['seeds'] = _lines(f['seeds'] as String?).map((l) {
+          final (a, b) = _split(l, ' | ');
+          return b == null ? a : {'label': a, 'text': b};
+        }).toList();
+      }
       final labels = <String, String>{};
       for (final l in _lines(f['labels'] as String?)) {
         final (k, d) = _split(l, ':');
@@ -152,18 +295,28 @@ Map<String, dynamic> buildDatagenBody(String pipeline, Map<String, Object?> f) {
       put('multiHop', f['multiHop']);
       put('verify', f['verify']);
     case 'reasoning_traces':
-      body['problems'] = _lines(f['problems'] as String?).map((l) {
-        final (p, a) = _split(l, ' || ');
-        return a == null ? p : {'problem': p, 'answer': a};
-      }).toList();
+      final problemsFrom = from('problemsFrom');
+      if (problemsFrom != null) {
+        body['problemsFrom'] = problemsFrom;
+      } else {
+        body['problems'] = _lines(f['problems'] as String?).map((l) {
+          final (p, a) = _split(l, ' || ');
+          return a == null ? p : {'problem': p, 'answer': a};
+        }).toList();
+      }
       put('target', num(f['target']));
       put('maxIterations', num(f['maxIterations']));
       put('threshold', dec(f['threshold']));
     case 'executable_qa':
-      body['seeds'] = _lines(f['seeds'] as String?).map((l) {
-        final (q, a) = _split(l, ' || ');
-        return a == null ? q : {'question': q, 'answer': a};
-      }).toList();
+      final seedsFrom = from('seedsFrom');
+      if (seedsFrom != null) {
+        body['seedsFrom'] = seedsFrom;
+      } else {
+        body['seeds'] = _lines(f['seeds'] as String?).map((l) {
+          final (q, a) = _split(l, ' || ');
+          return a == null ? q : {'question': q, 'answer': a};
+        }).toList();
+      }
       put('target', num(f['target']));
       put('timeoutMs', num(f['timeoutMs']));
     case 'export_logs':

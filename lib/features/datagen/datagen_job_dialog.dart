@@ -7,18 +7,31 @@ import '../../theme/tokens.dart';
 import 'datagen_api.dart';
 
 /// Opens the "new datagen job" dialog; `true` when a job was started.
-Future<bool?> showDatagenJobDialog(BuildContext context) =>
-    showDialog<bool>(context: context, builder: (_) => const _JobDialog());
+/// `from` preselects a dataset as the seeds (or problems) of `pipeline`;
+/// `datasets` are the ones a job may read from.
+Future<bool?> showDatagenJobDialog(
+  BuildContext context, {
+  String pipeline = 'expand_seeds',
+  String? from,
+  List<String> datasets = const [],
+}) =>
+    showDialog<bool>(
+      context: context,
+      builder: (_) => _JobDialog(pipeline: pipeline, from: from, datasets: datasets),
+    );
 
 class _JobDialog extends ConsumerStatefulWidget {
-  const _JobDialog();
+  const _JobDialog({required this.pipeline, this.from, this.datasets = const []});
+  final String pipeline;
+  final String? from;
+  final List<String> datasets;
 
   @override
   ConsumerState<_JobDialog> createState() => _JobDialogState();
 }
 
 class _JobDialogState extends ConsumerState<_JobDialog> {
-  String _pipeline = 'expand_seeds';
+  late String _pipeline = widget.pipeline;
   final _text = <String, TextEditingController>{};
   final _choice = <String, Object?>{
     'mode': 'new',
@@ -29,6 +42,14 @@ class _JobDialogState extends ConsumerState<_JobDialog> {
   };
   bool _busy = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.from != null) {
+      _choice[widget.pipeline == 'reasoning_traces' ? 'problemsFrom' : 'seedsFrom'] = widget.from;
+    }
+  }
 
   TextEditingController _c(String key, [String initial = '']) =>
       _text.putIfAbsent(key, () => TextEditingController(text: initial));
@@ -110,6 +131,28 @@ class _JobDialogState extends ConsumerState<_JobDialog> {
         ),
       );
 
+  /// "Or take them from a dataset": a dataset in place of the typed lines.
+  List<Widget> _fromDataset(String key, String label) {
+    final names = {...widget.datasets, if (_choice[key] is String) _choice[key] as String}.toList();
+    return [
+      Padding(
+        padding: const EdgeInsets.only(bottom: AppTokens.s12),
+        child: DropdownButtonFormField<String?>(
+          initialValue: _choice[key] as String?,
+          decoration: InputDecoration(labelText: context.tr(label), border: const OutlineInputBorder(), isDense: true),
+          items: [
+            DropdownMenuItem<String?>(value: null, child: Text(context.tr('None — use the lines above'))),
+            for (final n in names) DropdownMenuItem<String?>(value: n, child: Text(n)),
+          ],
+          onChanged: (v) => setState(() => _choice[key] = v),
+        ),
+      ),
+      if (_choice[key] != null)
+        _field('perLabel', 'Per label',
+            number: true, help: 'At most this many records of each label, spread across the dataset.'),
+    ];
+  }
+
   Widget _switch(String key, String label) => SwitchListTile(
         dense: true,
         contentPadding: EdgeInsets.zero,
@@ -123,6 +166,7 @@ class _JobDialogState extends ConsumerState<_JobDialog> {
             _field('seeds', 'Example requests',
                 lines: 6,
                 help: 'One per line. Prefix a label with " | " to make a labelled set, e.g. "browser | find a cheap flight".'),
+            ..._fromDataset('seedsFrom', 'Or seeds from a dataset'),
             _field('labels', 'Label descriptions', lines: 3, help: 'Optional, one per line: "label: what it means".'),
             _dropdown('mode', 'Mode', const {'new': 'New requests', 'evolve': 'Evolve seeds'}),
             _dropdown('checkLabel', 'Check labels', const {'auto': 'Auto', 'on': 'On', 'off': 'Off'}),
@@ -139,6 +183,7 @@ class _JobDialogState extends ConsumerState<_JobDialog> {
         'reasoning_traces' => [
             _field('problems', 'Problems',
                 lines: 6, help: 'One per line. Add the known answer after " || " to have it checked.'),
+            ..._fromDataset('problemsFrom', 'Or problems from a dataset'),
             _field('target', 'Target', number: true, help: 'Empty solves every problem.'),
             _field('maxIterations', 'Improvement rounds', initial: '3', number: true),
             _field('threshold', 'Score threshold', initial: '0.7', number: true),
@@ -148,6 +193,7 @@ class _JobDialogState extends ConsumerState<_JobDialog> {
                 lines: 6,
                 help:
                     'One per line, optionally "question || answer". Generated programs run in the sandbox; the job refuses to start without an enforced one.'),
+            ..._fromDataset('seedsFrom', 'Or seeds from a dataset'),
             _field('target', 'Target', initial: '50', number: true),
             _field('timeoutMs', 'Program timeout (ms)', initial: '10000', number: true),
           ],

@@ -1,7 +1,9 @@
 // Datagen (desktop). Covers what the screen exists to do against a faked
 // daemon: show a running job's progress and why candidates were rejected,
-// cancel it, read a dataset's records, delete a dataset — and that the form's
-// line formats turn into the same job body the web page sends.
+// cancel it, read a dataset's records, delete a dataset — that the form's
+// line formats turn into the same job body the web page sends — and the
+// source datasets: install from the catalog (asking first when its terms
+// need it), import a URL through a preview, use a dataset as seeds.
 
 import 'dart:convert';
 
@@ -50,13 +52,81 @@ class _FakeApi implements ApiClient {
     'startedAt': 2,
   };
 
+  static const _imported = {
+    'jobId': 'aaa111bbb222',
+    'name': 'senclaw-flows-vi',
+    'pipeline': 'import',
+    'state': 'done',
+    'target': 20000,
+    'accepted': 144,
+    'attempts': 144,
+    'llmCalls': 0,
+    'maxLlmCalls': 0,
+    'rejected': <String, int>{},
+    'startedAt': 3,
+    'provenance': {
+      'kind': 'labeled_text',
+      'license': 'MIT',
+      'sourceRows': 144,
+      'source': {'type': 'bundled', 'catalog': 'senclaw-flows-vi'},
+    },
+  };
+
+  static const _catalog = [
+    {
+      'id': 'senclaw-flows-vi',
+      'title': 'SenClaw flows (vi)',
+      'description': '144 yêu cầu tiếng Việt',
+      'kind': 'labeled_text',
+      'lang': 'vi',
+      'rows': 144,
+      'license': 'MIT',
+      'attribution': 'SenClaw',
+      'flags': <String, bool>{},
+      'needsConsent': false,
+      'bundled': true,
+      'installed': true,
+      'dataset': 'senclaw-flows-vi',
+    },
+    {
+      'id': 'xquad-vi',
+      'title': 'XQuAD · tiếng Việt',
+      'description': '1.190 câu hỏi kèm đoạn văn',
+      'kind': 'qa_context',
+      'lang': 'vi',
+      'rows': 1190,
+      'license': 'CC-BY-SA-4.0',
+      'attribution': 'XQuAD, Google',
+      'flags': {'shareAlike': true},
+      'notice': 'CC BY-SA: dùng lại phải ghi nguồn.',
+      'needsConsent': true,
+      'bundled': false,
+      'installed': false,
+    },
+    {
+      'id': 'gsm8k',
+      'title': 'GSM8K',
+      'description': '1.319 bài toán',
+      'kind': 'problem_answer',
+      'lang': 'en',
+      'rows': 1319,
+      'license': 'MIT',
+      'attribution': 'OpenAI',
+      'flags': <String, bool>{},
+      'needsConsent': false,
+      'bundled': false,
+      'installed': false,
+    },
+  ];
+
   @override
   Future<dynamic> get(String path, {Map<String, dynamic>? query, Duration? timeout}) async {
     calls.add('GET $path${query == null ? '' : ' $query'}');
     if (path == '/api/datagen/jobs') return {'jobs': [_running]};
     if (path == '/api/datagen/datasets') {
-      return {'root': '/scratch/datasets', 'datasets': [_running, _done]};
+      return {'root': '/scratch/datasets', 'datasets': [_running, _imported, _done]};
     }
+    if (path == '/api/datagen/catalog') return {'entries': _catalog};
     if (path.endsWith('/records')) {
       return {
         'total': 1,
@@ -71,6 +141,27 @@ class _FakeApi implements ApiClient {
   @override
   Future<dynamic> post(String path, {Object? body, Duration? timeout}) async {
     calls.add('POST $path ${jsonEncode(body ?? {})}');
+    if (path == '/api/datagen/import/preview') {
+      return {
+        'columns': ['utterance', 'intent'],
+        'rows': [
+          {'utterance': 'nhắc tôi họp lúc 9 giờ', 'intent': 'calendar_set'},
+          {'utterance': '', 'intent': 'x'},
+        ],
+        'total': 2,
+        'format': 'csv',
+        'suggested': {
+          'kind': 'labeled_text',
+          'mapping': {'text': 'utterance', 'label': 'intent'},
+        },
+        'records': [
+          {
+            'record': {'id': '1', 'text': 'nhắc tôi họp lúc 9 giờ', 'label': 'calendar_set'},
+          },
+          {'rejected': 'missing_text'},
+        ],
+      };
+    }
     return {'ok': true};
   }
 
@@ -123,6 +214,17 @@ void main() {
         'labels': {'browser': 'open web pages'},
         'mode': 'new',
         'target': 12,
+      });
+    });
+
+    test('a dataset picked instead of lines becomes seedsFrom / problemsFrom', () {
+      expect(buildDatagenBody('expand_seeds', {'seeds': 'ignored | x', 'seedsFrom': 'massive-vi', 'perLabel': '3'}), {
+        'pipeline': 'expand_seeds',
+        'seedsFrom': {'dataset': 'massive-vi', 'perLabel': 3},
+      });
+      expect(buildDatagenBody('reasoning_traces', {'problemsFrom': 'gsm8k'}), {
+        'pipeline': 'reasoning_traces',
+        'problemsFrom': {'dataset': 'gsm8k'},
       });
     });
 
@@ -219,5 +321,87 @@ void main() {
       {'label': 'browser', 'text': 'find a cheap flight'}
     ]);
     expect(body['target'], 50);
+  });
+
+  testWidgets('an imported dataset shows where it came from and feeds a new job', (tester) async {
+    final api = await _pump(tester);
+    expect(find.text('144 rows'), findsOneWidget, reason: 'an import counts what it kept, not of a ceiling');
+    expect(find.text('MIT'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Use as seeds').last);
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('senclaw-flows-vi'), findsWidgets, reason: 'the dataset is preselected');
+    await tester.tap(find.widgetWithText(FilledButton, 'Start'));
+    await tester.pump();
+    await tester.pump();
+    final sent = api.calls.firstWhere((c) => c.startsWith('POST /api/datagen/jobs '));
+    final body = jsonDecode(sent.substring('POST /api/datagen/jobs '.length)) as Map<String, dynamic>;
+    expect(body['pipeline'], 'expand_seeds');
+    expect(body['seedsFrom'], {'dataset': 'senclaw-flows-vi'});
+    expect(body.containsKey('seeds'), isFalse);
+  });
+
+  testWidgets('the catalog installs at once, or after agreeing to the terms', (tester) async {
+    final api = await _pump(tester);
+    await tester.tap(find.text('Source datasets'));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.text('XQuAD · tiếng Việt'), findsOneWidget);
+    expect(find.text('Installed'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Download').last);
+    await tester.pump();
+    final gsm = api.calls.lastWhere((c) => c.startsWith('POST /api/datagen/jobs '));
+    expect(jsonDecode(gsm.substring('POST /api/datagen/jobs '.length)), {
+      'pipeline': 'import',
+      'source': {'catalog': 'gsm8k'},
+    });
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Download').first);
+    await tester.pump();
+    expect(find.text('Install XQuAD · tiếng Việt?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'I agree, install'));
+    await tester.pump();
+    final xquad = api.calls.lastWhere((c) => c.startsWith('POST /api/datagen/jobs '));
+    expect(jsonDecode(xquad.substring('POST /api/datagen/jobs '.length)), {
+      'pipeline': 'import',
+      'source': {'catalog': 'xquad-vi'},
+      'acceptLicense': true,
+    });
+  });
+
+  testWidgets('a URL import previews, then sends kind, mapping and license', (tester) async {
+    final api = await _pump(tester);
+    await tester.tap(find.text('Import file / URL…'));
+    await tester.pump();
+    await tester.tap(find.text('URL').first);
+    await tester.pump();
+    await tester.enterText(find.byType(TextField).first, 'https://example.org/intents.csv');
+    await tester.tap(find.text('Preview'));
+    await tester.pump();
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.text('missing_text'), findsOneWidget);
+    expect(find.textContaining('nhắc tôi họp lúc 9 giờ'), findsOneWidget);
+    final preview = api.calls.firstWhere((c) => c.startsWith('POST /api/datagen/import/preview '));
+    expect(jsonDecode(preview.substring('POST /api/datagen/import/preview '.length)), {
+      'source': {'url': 'https://example.org/intents.csv'},
+    });
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Import'));
+    await tester.pump();
+    expect(find.text('Say the license, or private / unknown'), findsOneWidget, reason: 'no license, no import');
+    await tester.enterText(find.widgetWithText(TextField, 'License *'), 'private');
+    await tester.tap(find.widgetWithText(FilledButton, 'Import'));
+    await tester.pump();
+    await tester.pump();
+    final sent = api.calls.lastWhere((c) => c.startsWith('POST /api/datagen/jobs '));
+    expect(jsonDecode(sent.substring('POST /api/datagen/jobs '.length)), {
+      'pipeline': 'import',
+      'source': {'url': 'https://example.org/intents.csv'},
+      'kind': 'labeled_text',
+      'mapping': {'text': 'utterance', 'label': 'intent'},
+      'license': 'private',
+    });
   });
 }

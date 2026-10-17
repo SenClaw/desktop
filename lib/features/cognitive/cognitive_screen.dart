@@ -8,6 +8,7 @@ import '../../core/i18n/l10n.dart';
 import '../../core/transport/connection.dart';
 import '../../theme/tokens.dart';
 import 'cognitive_graph.dart';
+import 'facts_panel.dart';
 
 class CogNode {
   final String id;
@@ -101,7 +102,7 @@ class CognitiveScreen extends ConsumerStatefulWidget {
 class _CognitiveScreenState extends ConsumerState<CognitiveScreen> {
   CogNode? _selected;
   bool _showGraph = false;
-  String _tab = 'graph'; // graph | data — default to the graph view
+  String _tab = 'graph'; // graph | data | facts — default to the graph view
 
   @override
   Widget build(BuildContext context) {
@@ -162,6 +163,10 @@ class _CognitiveScreenState extends ConsumerState<CognitiveScreen> {
                       value: 'data',
                       icon: const Icon(Icons.list_alt_outlined, size: 15),
                       label: Text(context.tr('Data'))),
+                  ButtonSegment(
+                      value: 'facts',
+                      icon: const Icon(Icons.history_edu_outlined, size: 15),
+                      label: Text(context.tr('Facts'))),
                 ],
                 selected: {_tab},
                 onSelectionChanged: (s) => setState(() => _tab = s.first),
@@ -272,13 +277,17 @@ class _CognitiveScreenState extends ConsumerState<CognitiveScreen> {
                 onPressed: () {
                   ref.invalidate(cogStatsProvider);
                   ref.invalidate(cogNodesProvider);
+                  ref.invalidate(factBanksProvider);
+                  ref.invalidate(factsProvider);
                 },
               ),
             ],
           ),
         ),
         Expanded(
-          child: _tab == 'graph'
+          child: _tab == 'facts'
+              ? const FactsPanel()
+              : _tab == 'graph'
               ? CogGraphExplorer(
                   onNodeTap: (gn) => setState(() {
                     _selected =

@@ -50,6 +50,19 @@ class ChatScreen extends ConsumerWidget {
       }
     });
 
+    // The daemon refused to create the session just started (its project was
+    // archived or deleted meanwhile): say why and go back to the form, rather
+    // than leave a conversation that does not exist open.
+    ref.listen(registerRefusalProvider, (prev, next) {
+      if (next == null) return;
+      ref.read(selectedJidProvider.notifier).state = null;
+      ref.read(showNewChatProvider.notifier).state = true;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(context.trArgs(
+              'The session could not be created: {error}',
+              {'error': next.message}))));
+    });
+
     return Row(
       children: [
         // ── List pane ──────────────────────────────────────────────────

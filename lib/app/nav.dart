@@ -12,6 +12,9 @@ const navSections = <NavSection>[
   NavSection('/dashboard', 'Dashboard', Icons.dashboard_outlined),
   NavSection('/chat', 'Chat', Icons.forum_outlined),
   NavSection('/apps', 'Apps', Icons.apps_outlined),
+  // A project's folder, context and facts are what its sessions and boards share,
+  // so it sits right before the boards.
+  NavSection('/projects', 'Projects', Icons.folder_special_outlined),
   NavSection('/kanban', 'Kanban', Icons.view_kanban_outlined),
   NavSection('/notes', 'Notes', Icons.sticky_note_2_outlined),
   NavSection('/calendar', 'Calendar', Icons.calendar_month_outlined),

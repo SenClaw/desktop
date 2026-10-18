@@ -5,6 +5,17 @@ import '../../core/transport/connection.dart';
 import '../../core/transport/ws_client.dart';
 import '../../models/group.dart';
 
+/// The daemon turned a `register:group` down (an archived project, a project
+/// that is gone…). Without this the session the person is looking at would
+/// never exist and the first message would wait for it forever.
+class RegisterRefusal {
+  final String message;
+  final DateTime at;
+  RegisterRefusal(this.message) : at = DateTime.now();
+}
+
+final registerRefusalProvider = StateProvider<RegisterRefusal?>((ref) => null);
+
 /// The sidebar group list, driven by WS `groups` (full list) plus incremental
 /// `group:registered` / `group:unregistered` / `group:updated` events. Exposes
 /// create/rename/delete helpers (register/update/unregister over WS).
@@ -27,6 +38,13 @@ class GroupsNotifier extends StateNotifier<List<GroupInfo>> {
 
   void _onEvent(WsEvent e) {
     switch (e['type']) {
+      case 'error':
+        const prefix = 'register:group failed: ';
+        final message = '${e['message'] ?? ''}';
+        if (message.startsWith(prefix)) {
+          _ref.read(registerRefusalProvider.notifier).state =
+              RegisterRefusal(message.substring(prefix.length));
+        }
       case 'groups':
         if (e['groups'] is List) {
           state = (e['groups'] as List)
@@ -82,12 +100,17 @@ class GroupsNotifier extends StateNotifier<List<GroupInfo>> {
   void refresh() => _ref.read(wsClientProvider).send({'type': 'list:groups'});
 
   /// Register a new web-only chat; returns its jid. Mirrors ChatPage.handleStartChat.
+  ///
+  /// [projectId] puts the chat in a project — decided here and never again: the
+  /// daemon refuses to move or remove it later. The project's root then is the
+  /// chat's folder, whatever [workDir] says.
   String createChat({
     required String folder,
     required String name,
     required bool isCode,
     String? workDir,
     String? modelId,
+    String? projectId,
   }) {
     final rand = _rand(6);
     var jid = 'web:$folder:${_b36(DateTime.now().millisecondsSinceEpoch)}-$rand';
@@ -103,6 +126,7 @@ class GroupsNotifier extends StateNotifier<List<GroupInfo>> {
       'requiresTrigger': false,
       'allowedWorkDirs': isCode && workDir != null ? [workDir] : null,
       'modelId': modelId,
+      'projectId': ?projectId,
     });
     return jid;
   }
@@ -163,27 +187,41 @@ final pinnedProvider =
     );
 
 // ── Group / sort modes (persisted) ───────────────────────────────────────
-/// "Group by" axis: bucket sessions by project folder, by date, or not at all.
-enum GroupMode { project, date, none }
+/// "Group by" axis: bucket sessions by the agent they run on, by the project
+/// they were created in, by date, or not at all.
+enum GroupMode { agent, project, date, none }
 
-/// "Sort by" axis: order sessions (and project buckets) by last activity,
-/// creation time, or name A–Z.
+/// "Sort by" axis: order sessions (and buckets) by last activity, creation
+/// time, or name A–Z.
 enum SortMode { updated, created, name }
 
 class GroupModeNotifier extends StateNotifier<GroupMode> {
   GroupModeNotifier(this._ref)
     : super(_parse(_ref.read(prefsHelperProvider).string(kOrganizeKey, 'project')));
   final Ref _ref;
-  // Legacy 4-way organize values map onto the 3-way split: 'project-recent'
-  // collapses into 'project' (bucket order now follows the sort mode).
+
+  // What the pref holds. The agent axis was called "project" when only the
+  // agent's folder could be called that, and installs have 'project' stored, so
+  // it keeps that spelling; the axis of real projects is 'projects'. The
+  // legacy 4-way organize values map onto the split ('project-recent'
+  // collapses into the agent axis; bucket order follows the sort mode).
+  static String _key(GroupMode m) => switch (m) {
+    GroupMode.agent => 'project',
+    GroupMode.project => 'projects',
+    GroupMode.date => 'date',
+    GroupMode.none => 'none',
+  };
+
   static GroupMode _parse(String s) => switch (s) {
+    'projects' => GroupMode.project,
     'chronological' || 'date' => GroupMode.date,
     'flat' || 'none' => GroupMode.none,
-    _ => GroupMode.project,
+    _ => GroupMode.agent,
   };
+
   void set(GroupMode m) {
     state = m;
-    _ref.read(prefsHelperProvider).setString(kOrganizeKey, m.name);
+    _ref.read(prefsHelperProvider).setString(kOrganizeKey, _key(m));
   }
 }
 

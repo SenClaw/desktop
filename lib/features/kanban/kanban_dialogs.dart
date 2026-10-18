@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/i18n/l10n.dart';
 import '../../theme/tokens.dart';
+import '../projects/project_widgets.dart' show ProjectPicker;
+import '../projects/projects_provider.dart'
+    show activeProjectsProvider, projectBoardsProvider;
 import 'kanban_providers.dart';
 
 /// A folder field with a "Browse…" button. Returns the picked path via [ctl].
@@ -44,6 +47,67 @@ class _WorkspaceFieldState extends State<WorkspaceField> {
           label: Text(context.tr('Browse…')),
         ),
       ]),
+    ]);
+  }
+}
+
+/// The project a new board belongs to, and the folder that follows from it.
+///
+/// With a project chosen the folder is the project's root and cannot be edited
+/// (a board of a project works in the project's folder); without one, the
+/// ordinary workspace field. [locked] fixes the project when the dialog is
+/// opened from the project's own page.
+class BoardPlacementFields extends ConsumerWidget {
+  const BoardPlacementFields({
+    super.key,
+    required this.projectId,
+    required this.onProjectChanged,
+    required this.workspace,
+    this.locked = false,
+  });
+
+  final String? projectId;
+  final ValueChanged<String?> onProjectChanged;
+  final TextEditingController workspace;
+  final bool locked;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.colors;
+    final projects = ref.watch(activeProjectsProvider);
+    final project = projects.where((p) => p.id == projectId).firstOrNull;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      // Boards need no project; with none to pick the choice is not offered.
+      if (projects.isNotEmpty || project != null) ...[
+        Text(context.tr('Project'),
+            style: TextStyle(color: c.textMuted, fontSize: 11)),
+        ProjectPicker(
+            value: projectId, onChanged: onProjectChanged, enabled: !locked),
+        const SizedBox(height: AppTokens.s12),
+      ],
+      if (project == null)
+        WorkspaceField(controller: workspace)
+      else
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(context.tr('Workspace folder'),
+              style: TextStyle(color: c.textMuted, fontSize: 11)),
+          const SizedBox(height: 2),
+          Row(children: [
+            Icon(Icons.lock_outline, size: 14, color: c.textMuted),
+            const SizedBox(width: AppTokens.s4),
+            Expanded(
+              child: Text(project.root,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: c.textSecondary,
+                      fontSize: 12.5,
+                      fontFamily: AppTokens.fontMono)),
+            ),
+          ]),
+          Text(context.tr('Follows the project — change it in the project.'),
+              style: TextStyle(color: c.textMuted, fontSize: 11)),
+        ]),
     ]);
   }
 }
@@ -105,11 +169,14 @@ class TemplateDropdown extends ConsumerWidget {
   }
 }
 
-/// New-board dialog: title + columns template + workspace folder.
-Future<void> showNewBoardDialog(BuildContext context, WidgetRef ref) async {
+/// New-board dialog: title + columns template + project / workspace folder.
+/// [projectId] opens it already in a project, which then cannot be changed.
+Future<void> showNewBoardDialog(BuildContext context, WidgetRef ref,
+    {String? projectId}) async {
   final titleCtl = TextEditingController();
   final wsCtl = TextEditingController();
   String template = 'standard';
+  String? project = projectId;
   final created = await showDialog<int>(
     context: context,
     builder: (dctx) => StatefulBuilder(
@@ -130,7 +197,12 @@ Future<void> showNewBoardDialog(BuildContext context, WidgetRef ref) async {
             TemplateDropdown(
                 value: template, onChanged: (v) => setSt(() => template = v)),
             const SizedBox(height: AppTokens.s12),
-            WorkspaceField(controller: wsCtl),
+            BoardPlacementFields(
+              projectId: project,
+              onProjectChanged: (v) => setSt(() => project = v),
+              workspace: wsCtl,
+              locked: projectId != null,
+            ),
           ]),
         ),
         actions: [
@@ -143,8 +215,12 @@ Future<void> showNewBoardDialog(BuildContext context, WidgetRef ref) async {
               final id = await ref.read(kanbanApiProvider).createBoard(
                     titleCtl.text.trim(),
                     templateId: template,
-                    workspaceDir: wsCtl.text.trim(),
+                    workspaceDir: project == null ? wsCtl.text.trim() : null,
+                    projectId: project,
                   );
+              if (project != null) {
+                ref.invalidate(projectBoardsProvider(project!));
+              }
               if (dctx.mounted) Navigator.pop(dctx, id);
             },
             child: Text(dctx.tr('Create')),
@@ -156,11 +232,13 @@ Future<void> showNewBoardDialog(BuildContext context, WidgetRef ref) async {
   if (created != null) ref.read(openBoardProvider.notifier).state = created;
 }
 
-/// AI-board dialog: goal + template (incl. "AI generates columns") + workspace.
+/// AI-board dialog: goal + template (incl. "AI generates columns") + project /
+/// workspace folder.
 Future<void> showGenerateBoardDialog(BuildContext context, WidgetRef ref) async {
   final goalCtl = TextEditingController();
   final wsCtl = TextEditingController();
   String template = aiTemplateSentinel;
+  String? project;
   final ok = await showDialog<bool>(
     context: context,
     builder: (dctx) => StatefulBuilder(
@@ -185,7 +263,11 @@ Future<void> showGenerateBoardDialog(BuildContext context, WidgetRef ref) async 
                 allowAi: true,
                 onChanged: (v) => setSt(() => template = v)),
             const SizedBox(height: AppTokens.s12),
-            WorkspaceField(controller: wsCtl),
+            BoardPlacementFields(
+              projectId: project,
+              onProjectChanged: (v) => setSt(() => project = v),
+              workspace: wsCtl,
+            ),
           ]),
         ),
         actions: [
@@ -207,8 +289,10 @@ Future<void> showGenerateBoardDialog(BuildContext context, WidgetRef ref) async 
       final id = await ref.read(kanbanApiProvider).generateBoard(
             goalCtl.text.trim(),
             templateId: template == aiTemplateSentinel ? null : template,
-            workspaceDir: wsCtl.text.trim(),
+            workspaceDir: project == null ? wsCtl.text.trim() : null,
+            projectId: project,
           );
+      if (project != null) ref.invalidate(projectBoardsProvider);
       if (id != null) ref.read(openBoardProvider.notifier).state = id;
     } catch (e) {
       messenger.showSnackBar(SnackBar(

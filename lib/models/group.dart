@@ -14,6 +14,10 @@ class GroupInfo {
   /// drives the per-session Files browser. Null for non-code chats.
   final String? workDir;
 
+  /// The project the session was created in; fixed for the session's life.
+  /// Null for a session outside any project.
+  final String? projectId;
+
   const GroupInfo({
     required this.jid,
     required this.name,
@@ -24,6 +28,7 @@ class GroupInfo {
     this.modelId,
     this.groupType,
     this.workDir,
+    this.projectId,
   });
 
   factory GroupInfo.fromJson(Map<String, dynamic> j) => GroupInfo(
@@ -41,6 +46,10 @@ class GroupInfo {
       if (dirs is List && dirs.isNotEmpty) return '${dirs.first}';
       return null;
     }(),
+    projectId: () {
+      final id = j['projectId']?.toString();
+      return id == null || id.isEmpty ? null : id;
+    }(),
   );
 
   GroupInfo copyWith({int? lastActivity}) => GroupInfo(
@@ -53,5 +62,6 @@ class GroupInfo {
         modelId: modelId,
         groupType: groupType,
         workDir: workDir,
+        projectId: projectId,
       );
 }

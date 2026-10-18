@@ -8,6 +8,7 @@ import '../features/chat/mini_chat_screen.dart';
 import '../features/cognitive/cognitive_screen.dart';
 import '../features/cowork/cowork_screen.dart';
 import '../features/kanban/kanban_screen.dart';
+import '../features/projects/projects_screen.dart';
 import '../features/diagnostics/diagnostics_screen.dart';
 import '../features/plugins/plugins_screen.dart';
 import '../features/settings/settings_screen.dart';
@@ -51,6 +52,10 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/cowork',
           pageBuilder: (context, state) => _noTransition(const CoworkScreen()),
+        ),
+        GoRoute(
+          path: '/projects',
+          pageBuilder: (context, state) => _noTransition(const ProjectsScreen()),
         ),
         GoRoute(
           path: '/kanban',

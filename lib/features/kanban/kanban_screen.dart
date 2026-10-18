@@ -8,6 +8,8 @@ import '../../theme/tokens.dart';
 import '../../widgets/app_markdown.dart';
 import '../../widgets/refresh_on_mount.dart';
 import '../../widgets/section_scaffold.dart';
+import '../projects/projects_provider.dart'
+    show activeProjectsProvider, projectNamesProvider, projectsProvider;
 import 'kanban_dialogs.dart';
 import 'kanban_providers.dart';
 import 'worktree_panel.dart';
@@ -65,7 +67,7 @@ class KanbanScreen extends ConsumerWidget {
     // Keep the WS live-update subscription alive while the screen is shown.
     ref.watch(kanbanLiveUpdatesProvider);
     return RefreshOnMount(
-      providers: [kanbanBoardsProvider],
+      providers: [kanbanBoardsProvider, projectsProvider],
       child: open == null ? const _BoardListView() : _BoardView(boardId: open),
     );
   }
@@ -115,19 +117,86 @@ class _BoardListView extends ConsumerWidget {
               ),
             );
           }
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(AppTokens.s16),
-            child: Wrap(
-              spacing: AppTokens.s12,
-              runSpacing: AppTokens.s12,
-              children: [for (final b in list) _BoardCard(board: b)],
-            ),
+          final filter = ref.watch(boardProjectFilterProvider);
+          final shown = switch (filter) {
+            null => list,
+            kNoProjectFilter => list.where((b) => b.projectId == null).toList(),
+            final id => list.where((b) => b.projectId == id).toList(),
+          };
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const _ProjectFilter(),
+              Expanded(
+                child: shown.isEmpty
+                    ? Center(
+                        child: Text(
+                            context.tr('No board belongs to this project.'),
+                            style: TextStyle(color: c.textMuted)))
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.all(AppTokens.s16),
+                        child: Wrap(
+                          spacing: AppTokens.s12,
+                          runSpacing: AppTokens.s12,
+                          children: [
+                            for (final b in shown) _BoardCard(board: b)
+                          ],
+                        ),
+                      ),
+              ),
+            ],
           );
         },
       ),
     );
   }
 
+}
+
+/// Narrows the board list to one project, or to boards that have none. Only
+/// shown once there is a project to narrow by.
+class _ProjectFilter extends ConsumerWidget {
+  const _ProjectFilter();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.colors;
+    final projects = ref.watch(activeProjectsProvider);
+    final names = ref.watch(projectNamesProvider);
+    final filter = ref.watch(boardProjectFilterProvider);
+    if (projects.isEmpty && filter == null) return const SizedBox.shrink();
+    // A filter on a project that is gone or archived still has to be a choice
+    // the dropdown can show.
+    final ids = {for (final p in projects) p.id, ?filter};
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppTokens.s16, AppTokens.s12, AppTokens.s16, 0),
+      child: Row(children: [
+        Icon(Icons.folder_special_outlined, size: 16, color: c.textMuted),
+        const SizedBox(width: AppTokens.s8),
+        DropdownButton<String?>(
+          value: filter == null || filter == kNoProjectFilter || ids.contains(filter)
+              ? filter
+              : null,
+          isDense: true,
+          underline: const SizedBox.shrink(),
+          style: TextStyle(color: c.textPrimary, fontSize: 13),
+          items: [
+            DropdownMenuItem<String?>(
+                value: null, child: Text(context.tr('All projects'))),
+            DropdownMenuItem<String?>(
+                value: kNoProjectFilter, child: Text(context.tr('No project'))),
+            for (final id in ids)
+              if (id != kNoProjectFilter)
+                DropdownMenuItem<String?>(
+                    value: id, child: Text(names[id] ?? id)),
+          ],
+          onChanged: (v) =>
+              ref.read(boardProjectFilterProvider.notifier).state = v,
+        ),
+      ]),
+    );
+  }
 }
 
 class _BoardCard extends ConsumerWidget {
@@ -198,6 +267,23 @@ class _BoardCard extends ConsumerWidget {
                   context.trArgs('{c} columns · {k} cards',
                       {'c': board.columnCount, 'k': board.cardCount}),
                   style: TextStyle(color: c.textMuted, fontSize: 12)),
+              if (board.projectId != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: AppTokens.s4),
+                  child: Row(children: [
+                    Icon(Icons.folder_special_outlined,
+                        size: 13, color: c.textMuted),
+                    const SizedBox(width: AppTokens.s4),
+                    Expanded(
+                      child: Text(
+                          ref.watch(projectNamesProvider)[board.projectId] ??
+                              board.projectId!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: c.textMuted, fontSize: 12)),
+                    ),
+                  ]),
+                ),
             ],
           ),
         ),
@@ -228,13 +314,22 @@ class _BoardView extends ConsumerWidget {
       ..sort();
 
     final drawerOpen = ref.watch(activityDrawerProvider);
-    final ws = (board?.workspaceDir ?? '').trim();
+    // Where workers run: the board's own folder, else its project's root.
+    final ws = (board?.effectiveWorkspaceDir ?? board?.workspaceDir ?? '').trim();
+    final projectName = board?.projectId == null
+        ? null
+        : ref.watch(projectNamesProvider)[board!.projectId] ?? board.projectId;
 
     return SectionScaffold(
       title: board?.title ?? context.tr('Board'),
-      subtitle: ws.isEmpty
-          ? context.tr('Drag cards between columns · Ready is picked up by workers')
-          : context.trArgs('Workspace: {dir}', {'dir': ws}),
+      subtitle: projectName != null
+          ? (ws.isEmpty
+              ? context.trArgs('Project: {name}', {'name': projectName})
+              : context.trArgs('Project: {name} · Workspace: {dir}',
+                  {'name': projectName, 'dir': ws}))
+          : ws.isEmpty
+              ? context.tr('Drag cards between columns · Ready is picked up by workers')
+              : context.trArgs('Workspace: {dir}', {'dir': ws}),
       actions: [
         IconButton(
           tooltip: context.tr('Back to boards'),
@@ -1074,7 +1169,8 @@ class _CardDetailDialogState extends ConsumerState<_CardDetailDialog> {
     final api = ref.read(kanbanApiProvider);
     final boards = ref.watch(kanbanBoardsProvider).valueOrNull ?? const [];
     final board = boards.where((b) => b.id == widget.boardId).firstOrNull;
-    final repo = (board?.workspaceDir ?? '').trim();
+    final repo =
+        (board?.effectiveWorkspaceDir ?? board?.workspaceDir ?? '').trim();
 
     return Dialog(
       backgroundColor: c.surface,

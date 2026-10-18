@@ -134,6 +134,46 @@ Rules:
   UI. A retry refusal (400 body) is shown verbatim; do not replace it with a
   generic "retry failed".
 
+## Projects
+
+A project is a folder root that sessions and kanban boards work in, with a
+context and facts of its own (`lib/features/projects/`, client of
+`/api/projects*`, specified in `../senclaw/docs/openapi-daemon.yaml`).
+
+- **A session is put in a project when it is created, and never moved.**
+  `GroupsNotifier.createChat(projectId:)` puts it on `register:group`; the
+  daemon refuses `update:group` that changes or drops it. So there is no "move
+  to project" menu, and New Session locks the folder to the project's root
+  (`_FolderPill` with `onTap: null`). Only chat and code sessions can join —
+  cowork, schedule and workflow never get the picker. A refused registration
+  comes back as a WS `error` (`registerRefusalProvider`) and `ChatScreen` goes
+  back to the form.
+- **No push event for projects.** Screens refresh after this window's own
+  action and when the window gets focus back (`projectsFocusRefreshProvider`,
+  watched by `ProjectsScreen` and `SessionList`); a second window's edit shows
+  at the next refresh.
+- **A context write that lost a race is a 409 with the current text.**
+  `ApiException.body` carries the decoded error body; the Context tab shows the
+  daemon's copy beside the edit and the person picks. Never retry the PUT
+  silently with the new version.
+- **Deleting a project outright is slow** (a 20 000-fact bank took ~23 s).
+  `ProjectsApi.purge` runs inside `ApiClient.withTimeout(kProjectPurgeTimeout)`,
+  a zone value on purpose: every test fake `implements ApiClient`, so a new
+  named parameter on `delete` would break all of them. A timeout there is not a
+  failure — the daemon carries on; the dialog says so and the screens reload.
+- **The session list has two grouping axes that sound alike.** `GroupMode.agent`
+  buckets by the agent's folder (stored as `'project'`, what that axis was
+  called before projects existed — installs have it), `GroupMode.project` by
+  the real project (`'projects'`), the sessions with none last.
+- **A project's facts are the bank `project:<id>`**, listed in Knowledge →
+  Facts by the project's name (`bankLabel`) and managed in the project's own
+  Facts tab (`FactRow` is shared). Personal facts said in a project chat stay in
+  that bank for now; the tab says so.
+- Vietnamese is `lib/core/i18n/vi/projects.dart`; `test/projects_i18n_test.dart`
+  fails on any string of `lib/features/projects/` without an entry, and
+  `test/projects_layout_test.dart` renders the screens, the shell rail and the
+  session list in both languages with a real font.
+
 ## i18n
 
 Every user-facing string ships in English (the lookup key) and Vietnamese.

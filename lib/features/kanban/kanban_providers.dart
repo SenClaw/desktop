@@ -35,6 +35,11 @@ final workerLanesProvider = StateProvider<bool>((ref) => true);
 /// Filter the board to one assignee (null = all).
 final assigneeFilterProvider = StateProvider<String?>((ref) => null);
 
+/// The board list narrowed to one project: null = every board,
+/// [kNoProjectFilter] = boards that belong to no project, otherwise a project id.
+final boardProjectFilterProvider = StateProvider<String?>((ref) => null);
+const kNoProjectFilter = '';
+
 final kanbanBoardsProvider = FutureProvider<List<KanbanBoard>>((ref) async {
   final r = await ref.read(apiClientProvider).get('/api/kanban/boards');
   return (r is List ? r : const [])
@@ -105,13 +110,17 @@ class KanbanApi {
   }
 
   Future<int?> createBoard(String title,
-      {bool withDefaults = true, String? templateId, String? workspaceDir}) async {
+      {bool withDefaults = true,
+      String? templateId,
+      String? workspaceDir,
+      String? projectId}) async {
     final r = await _client.post('/api/kanban/boards', body: {
       'title': title,
       'with_defaults': withDefaults,
       'template_id': ?templateId,
       if (workspaceDir != null && workspaceDir.isNotEmpty)
         'workspace_dir': workspaceDir,
+      'project_id': ?projectId,
     });
     _ref.invalidate(kanbanBoardsProvider);
     return (r is Map ? r['id'] as num? : null)?.toInt();
@@ -222,13 +231,17 @@ class KanbanApi {
   /// columns too; otherwise columns come from the template and AI generates
   /// only the task cards.
   Future<int?> generateBoard(String goal,
-      {int? boardId, String? templateId, String? workspaceDir}) async {
+      {int? boardId,
+      String? templateId,
+      String? workspaceDir,
+      String? projectId}) async {
     final r = await _client.post('/api/kanban/generate', body: {
       'goal': goal,
       'board_id': ?boardId,
       'template_id': ?templateId,
       if (workspaceDir != null && workspaceDir.isNotEmpty)
         'workspace_dir': workspaceDir,
+      'project_id': ?projectId,
     });
     _ref.invalidate(kanbanBoardsProvider);
     final id = (r is Map ? r['boardId'] as num? : null)?.toInt();

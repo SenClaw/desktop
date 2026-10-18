@@ -5,6 +5,9 @@ import '../../core/i18n/l10n.dart';
 import '../../core/prefs.dart';
 import '../../models/group.dart';
 import '../../theme/tokens.dart';
+import '../projects/project_widgets.dart' show projectLabel;
+import '../projects/projects_provider.dart'
+    show projectNamesProvider, projectsFocusRefreshProvider;
 import '../workflow/workflow_session_pane.dart' show WorkflowSessionSection;
 import 'agent_states_provider.dart';
 import 'agents_provider.dart';
@@ -80,12 +83,19 @@ class _SessionListState extends ConsumerState<SessionList> {
     return '${dt.day}/${dt.month}';
   }
 
-  (String, String) _bucket(GroupInfo g, GroupMode mode, int ts) {
-    if (mode == GroupMode.project) {
+  (String, String) _bucket(
+      GroupInfo g, GroupMode mode, int ts, Map<String, String> projectNames) {
+    if (mode == GroupMode.agent) {
       final f = (g.folder == null || g.folder!.isEmpty)
           ? context.tr('(unknown)')
           : g.folder!;
       return (f, f);
+    }
+    if (mode == GroupMode.project) {
+      final id = g.projectId;
+      return id == null
+          ? (_noProjectKey, context.tr('No project'))
+          : ('prj:$id', projectLabel(projectNames, id));
     }
     if (mode == GroupMode.none) return ('all', context.tr('Sessions'));
     if (ts == 0) return ('older', context.tr('Older'));
@@ -103,6 +113,9 @@ class _SessionListState extends ConsumerState<SessionList> {
     return ('older', context.tr('Older'));
   }
 
+  /// Bucket key of the sessions that belong to no project.
+  static const _noProjectKey = 'none';
+
   static const _chronoOrder = {
     'today': 0, 'yesterday': 1, 'past7': 2, 'past30': 3, 'older': 4,
   };
@@ -116,6 +129,9 @@ class _SessionListState extends ConsumerState<SessionList> {
     final sort = ref.watch(sortProvider);
     final selected = ref.watch(selectedJidProvider);
     final states = ref.watch(agentStatesProvider);
+    final projectNames = ref.watch(projectNamesProvider);
+    // A project edited in another window shows up when this one is back.
+    ref.watch(projectsFocusRefreshProvider);
 
     final pinnedGroups = groups.where((g) => pinned.contains(g.jid)).toList();
     final rest = groups.where((g) => !pinned.contains(g.jid)).toList();
@@ -124,7 +140,7 @@ class _SessionListState extends ConsumerState<SessionList> {
     final buckets = <String, ({String label, List<GroupInfo> items, int maxTs})>{};
     for (final g in rest) {
       final ts = _ts(g, sort);
-      final (key, label) = _bucket(g, groupMode, ts);
+      final (key, label) = _bucket(g, groupMode, ts, projectNames);
       final b = buckets[key];
       if (b == null) {
         buckets[key] = (label: label, items: [g], maxTs: ts);
@@ -148,9 +164,15 @@ class _SessionListState extends ConsumerState<SessionList> {
             return (_chronoOrder[a.key] ?? 99).compareTo(_chronoOrder[b.key] ?? 99);
           case GroupMode.none:
             return 0;
+          case GroupMode.agent:
           case GroupMode.project:
-            // Project buckets follow the sort mode: A–Z for name, else the
-            // bucket with the freshest session first.
+            // The sessions outside every project come after the projects.
+            if (groupMode == GroupMode.project &&
+                (a.key == _noProjectKey) != (b.key == _noProjectKey)) {
+              return a.key == _noProjectKey ? 1 : -1;
+            }
+            // Buckets follow the sort mode: A–Z for name, else the bucket
+            // with the freshest session first.
             return sort == SortMode.name
                 ? a.value.label.toLowerCase().compareTo(b.value.label.toLowerCase())
                 : b.value.maxTs.compareTo(a.value.maxTs);
@@ -248,11 +270,12 @@ class _SessionListState extends ConsumerState<SessionList> {
     final c = context.colors;
     // Date mode groups by time buckets below, so no redundant wrapper label
     // here — keep just the group/sort menu.
-    final title = groupMode == GroupMode.none
-        ? context.tr('Sessions')
-        : groupMode == GroupMode.date
-            ? ''
-            : context.tr('Projects');
+    final title = switch (groupMode) {
+      GroupMode.none => context.tr('Sessions'),
+      GroupMode.date => '',
+      GroupMode.agent => context.tr('Agents'),
+      GroupMode.project => context.tr('Projects'),
+    };
     return Padding(
       padding: const EdgeInsets.fromLTRB(
           AppTokens.s16, AppTokens.s8, AppTokens.s8, AppTokens.s4),
@@ -279,6 +302,7 @@ class _SessionListState extends ConsumerState<SessionList> {
     final c = context.colors;
     final collapsedKey = '${groupMode.name}:$key';
     final isCollapsed = _collapsed.contains(collapsedKey);
+    final isAgent = groupMode == GroupMode.agent;
     final isProject = groupMode == GroupMode.project;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -292,9 +316,17 @@ class _SessionListState extends ConsumerState<SessionList> {
               children: [
                 Icon(isCollapsed ? Icons.chevron_right : Icons.expand_more,
                     size: 14, color: c.textMuted),
-                if (isProject) ...[
+                if (isAgent) ...[
                   const SizedBox(width: 2),
                   Icon(Icons.folder_outlined, size: 12, color: c.textMuted),
+                ] else if (isProject) ...[
+                  const SizedBox(width: 2),
+                  Icon(
+                      key == _noProjectKey
+                          ? Icons.inbox_outlined
+                          : Icons.folder_special_outlined,
+                      size: 12,
+                      color: c.textMuted),
                 ],
                 const SizedBox(width: AppTokens.s4),
                 Expanded(
@@ -315,13 +347,15 @@ class _SessionListState extends ConsumerState<SessionList> {
           ),
         ),
         if (!isCollapsed)
-          for (final g in items) _item(g, selected, states, pinned),
+          for (final g in items)
+            _item(g, selected, states, pinned, inProjectBucket: isProject),
       ],
     );
   }
 
   Widget _item(GroupInfo g, String? selected, Map<String, String> states,
-      Set<String> pinned) {
+      Set<String> pinned,
+      {bool inProjectBucket = false}) {
     final c = context.colors;
     final isSelected = g.jid == selected;
     final state = states[g.jid] ?? 'idle';
@@ -382,6 +416,15 @@ class _SessionListState extends ConsumerState<SessionList> {
                         ),
                       ),
               ),
+              if (!isRenaming && g.projectId != null && !inProjectBucket) ...[
+                Tooltip(
+                  message: projectLabel(
+                      ref.watch(projectNamesProvider), g.projectId!),
+                  child: Icon(Icons.folder_special_outlined,
+                      size: 12, color: c.textMuted),
+                ),
+                const SizedBox(width: AppTokens.s4),
+              ],
               if (!isRenaming) ...[
                 Text(
                   _relTime(g.lastActivity ?? _jidCreatedAt(g.jid)),
@@ -484,6 +527,8 @@ class _OrganizeMenu extends ConsumerWidget {
       ),
       onSelected: (k) {
         switch (k) {
+          case 'g:agent':
+            ref.read(groupModeProvider.notifier).set(GroupMode.agent);
           case 'g:project':
             ref.read(groupModeProvider.notifier).set(GroupMode.project);
           case 'g:date':
@@ -532,7 +577,9 @@ class _OrganizeMenu extends ConsumerWidget {
             );
         return [
           header('Group by'),
-          option('g:project', Icons.folder_outlined, 'Project',
+          option('g:agent', Icons.person_outline, 'Agent',
+              groupMode == GroupMode.agent),
+          option('g:project', Icons.folder_special_outlined, 'Project',
               groupMode == GroupMode.project),
           option('g:date', Icons.schedule_outlined, 'Date',
               groupMode == GroupMode.date),

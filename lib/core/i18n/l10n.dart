@@ -16,6 +16,7 @@ import 'vi/dock_cowork.dart';
 import 'vi/kanban.dart';
 import 'vi/plugins_misc.dart';
 import 'vi/plugins_screen.dart';
+import 'vi/projects.dart';
 import 'vi/runtime.dart';
 import 'vi/settings_misc.dart';
 import 'vi/settings_screen.dart';
@@ -63,6 +64,7 @@ class L10n {
     ...viDashboardUsage,
     ...viCognitiveWiki,
     ...viDockCowork,
+    ...viProjects,
   };
 
   /// Current language for code that has no BuildContext (tray menu labels,

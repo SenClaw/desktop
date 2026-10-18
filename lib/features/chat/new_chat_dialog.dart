@@ -10,8 +10,12 @@ import 'package:record/record.dart';
 import '../../core/i18n/l10n.dart';
 import '../../core/prefs.dart';
 import '../../core/transport/connection.dart';
+import '../../models/project.dart';
 import '../../theme/tokens.dart';
 import '../cowork/cowork_providers.dart';
+import '../projects/project_widgets.dart' show ProjectPicker;
+import '../projects/projects_provider.dart'
+    show activeProjectsProvider, newChatProjectProvider;
 import '../workflow/workflow_quick_start.dart';
 import 'agents_provider.dart';
 import 'audio_service.dart';
@@ -119,6 +123,10 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
   String _chatType = 'Agent'; // Agent | Plan | Dag (web Segmented)
   String _kind = 'chat'; // chat | code | cowork | schedule
   String? _workDir;
+  // The project the session is created in (chat and code only). Chosen here
+  // and fixed for the session's life: the daemon does not move a session
+  // between projects afterwards.
+  String? _projectId;
   String? _templateId; // selected cowork template
   String _freq = 'daily'; // schedule frequency (daily|weekly|monthly|once|advanced)
   final _schedTime = TextEditingController(text: '09:00');
@@ -137,9 +145,28 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
   bool get _isSchedule => _kind == 'schedule';
   bool get _isWorkflow => _kind == 'workflow';
 
+  /// The project picked, while it is still one a session can join.
+  Project? get _project => _projectId == null
+      ? null
+      : ref
+          .read(activeProjectsProvider)
+          .where((p) => p.id == _projectId)
+          .firstOrNull;
+
+  /// The folder of a chat or code session: the project's root when there is a
+  /// project (read-only), else what was picked.
+  String? get _sessionDir => _project?.root ?? _workDir;
+
   @override
   void initState() {
     super.initState();
+    // "New session here" on a project's page lands on this project.
+    _projectId = ref.read(newChatProjectProvider);
+    if (_projectId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ref.read(newChatProjectProvider.notifier).state = null;
+      });
+    }
     // The composer no longer owns an onChanged callback, so keep the Start
     // button's enabled state in step with the draft here.
     _msg.addListener(_onDraftChanged);
@@ -491,8 +518,9 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
               ? context.trArgs('New chat with {agent}', {'agent': agentName})
               : name,
           isCode: _isCode,
-          workDir: _workDir,
+          workDir: _sessionDir,
           modelId: _modelId,
+          projectId: _project?.id,
         );
     ref.read(selectedJidProvider.notifier).state = jid;
     // Instantiates the conversation notifier (subscribes) and queues the
@@ -570,7 +598,7 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
     }
     if (_isCode) {
       final base =
-          _workDir?.split('/').where((s) => s.isNotEmpty).lastOrNull;
+          _sessionDir?.split('/').where((s) => s.isNotEmpty).lastOrNull;
       return base != null
           ? (
               heading: context
@@ -582,15 +610,17 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
               sub: context.tr('Choose your project root below.')
             );
     }
+    final sub = _project != null
+        ? context.trArgs(
+            'In the project “{name}” — it works in the project folder.',
+            {'name': _project!.name})
+        : context.tr('No workspace needed — just a conversation.');
     return agentName != null
         ? (
             heading: context.trArgs('Chat with {agent}', {'agent': agentName}),
-            sub: context.tr('No workspace needed — just a conversation.')
+            sub: sub
           )
-        : (
-            heading: context.tr('How can I help today?'),
-            sub: context.tr('No workspace needed — just a conversation.')
-          );
+        : (heading: context.tr('How can I help today?'), sub: sub);
   }
 
   static const _suggestions = [
@@ -664,7 +694,9 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
       children: [
         Row(children: [
           if (_isCode) ...[
-            _FolderPill(workDir: _workDir, onTap: _pickFolder),
+            _FolderPill(
+                workDir: _sessionDir,
+                onTap: _project == null ? _pickFolder : null),
             Container(
                 width: 1,
                 height: 16,
@@ -779,6 +811,10 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
             .map((a) => a.name)
             .firstOrNull;
     final g = _greeting(agentName);
+    final projects = ref.watch(activeProjectsProvider);
+    // Offered for chat and code only, and only once there is a project to pick.
+    final showProject = (_kind == 'chat' || _kind == 'code') &&
+        (projects.isNotEmpty || _project != null);
     final canStart = _msg.text.trim().isNotEmpty;
     // The compact mini-chat window hides the quick-suggestion chips (too little
     // room); the full New Chat page still shows them.
@@ -804,6 +840,8 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
                     onChanged: (k) => setState(() {
                       _kind = k;
                       if (k != 'code') _workDir = null;
+                      // Only chat and code sessions can be in a project.
+                      if (k != 'chat' && k != 'code') _projectId = null;
                     }),
                   ),
                 ),
@@ -836,6 +874,14 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
                   ],
                 ],
               ),
+              if (showProject) ...[
+                const SizedBox(height: AppTokens.s12),
+                _ProjectRow(
+                  projectId: _project?.id,
+                  root: _project?.root,
+                  onChanged: (id) => setState(() => _projectId = id),
+                ),
+              ],
               const SizedBox(height: AppTokens.s20),
               // Workflow kind swaps the composer for the quick-start panel
               // (pick & run a saved workflow, or create one with the agent).
@@ -866,7 +912,7 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
                       child: SlashMentionField(
                         controller: _msg,
                         onSend: canStart ? _start : () {},
-                        fileScope: mentionScopeForPath(_workDir),
+                        fileScope: mentionScopeForPath(_sessionDir),
                         autofocus: true,
                         minLines: 3,
                         decoration: InputDecoration(
@@ -1119,7 +1165,8 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
                           ] else ...[
                           if (_isCode) ...[
                             _FolderPill(
-                                workDir: _workDir, onTap: _pickFolder),
+                                workDir: _sessionDir,
+                                onTap: _project == null ? _pickFolder : null),
                             Container(
                                 width: 1,
                                 height: 16,
@@ -1296,7 +1343,9 @@ class _SendButton extends StatelessWidget {
 class _FolderPill extends StatelessWidget {
   const _FolderPill({required this.workDir, required this.onTap});
   final String? workDir;
-  final VoidCallback onTap;
+
+  /// Null locks the folder: it is the project's, and only the project changes it.
+  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -1305,29 +1354,84 @@ class _FolderPill extends StatelessWidget {
         ? (workDir!.split('/').where((s) => s.isNotEmpty).lastOrNull ??
             context.tr('Folder'))
         : context.tr('Folder');
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        decoration: BoxDecoration(
-          color: has ? c.accentSoft : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppTokens.rMd),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.folder_open_outlined,
-              size: 13, color: has ? c.accent : c.textMuted),
-          const SizedBox(width: 4),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 120),
-            child: Text(name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    color: has ? c.accent : c.textSecondary, fontSize: 12)),
+    return Tooltip(
+      message: onTap == null ? context.tr('The folder follows the project') : '',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color: has ? c.accentSoft : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppTokens.rMd),
           ),
-        ]),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.folder_open_outlined,
+                size: 13, color: has ? c.accent : c.textMuted),
+            const SizedBox(width: 4),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 120),
+              child: Text(name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: has ? c.accent : c.textSecondary, fontSize: 12)),
+            ),
+            if (onTap == null) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.lock_outline, size: 11, color: c.accent),
+            ],
+          ]),
+        ),
       ),
     );
+  }
+}
+
+/// The project a chat or code session is created in, and the folder that
+/// follows from it. Both are fixed once the session exists.
+class _ProjectRow extends StatelessWidget {
+  const _ProjectRow(
+      {required this.projectId, required this.root, required this.onChanged});
+  final String? projectId;
+  final String? root;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(Icons.folder_special_outlined, size: 16, color: c.textMuted),
+        const SizedBox(width: AppTokens.s8),
+        Text(context.tr('Project'),
+            style: TextStyle(color: c.textMuted, fontSize: 13)),
+        const SizedBox(width: AppTokens.s8),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 240, minWidth: 160),
+          child: ProjectPicker(value: projectId, onChanged: onChanged),
+        ),
+      ]),
+      if (root != null)
+        Padding(
+          padding: const EdgeInsets.only(top: AppTokens.s4),
+          child: Tooltip(
+            message: context.tr('The folder follows the project'),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(Icons.lock_outline, size: 12, color: c.textMuted),
+              const SizedBox(width: AppTokens.s4),
+              Flexible(
+                child: Text(root!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: c.textMuted,
+                        fontSize: 11.5,
+                        fontFamily: AppTokens.fontMono)),
+              ),
+            ]),
+          ),
+        ),
+    ]);
   }
 }
 

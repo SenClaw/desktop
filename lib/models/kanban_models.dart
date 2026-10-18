@@ -8,13 +8,21 @@ class KanbanBoard {
   final String title;
   final String description;
 
-  /// Where this board's dispatched workers run (task outputs land here).
+  /// The folder the board names for itself (task outputs land here).
   final String? workspaceDir;
   final int columnCount;
   final int cardCount;
 
+  /// The project the board was created in; null for an ordinary board.
+  final String? projectId;
+
+  /// Where the board's workers really run: its own folder, else its project's
+  /// root. Null for a board that uses a scratch folder per card.
+  final String? effectiveWorkspaceDir;
+
   const KanbanBoard(this.id, this.title, this.description, this.workspaceDir,
-      this.columnCount, this.cardCount);
+      this.columnCount, this.cardCount,
+      {this.projectId, this.effectiveWorkspaceDir});
 
   factory KanbanBoard.fromJson(Map<String, dynamic> j) => KanbanBoard(
         (j['id'] as num?)?.toInt() ?? 0,
@@ -23,6 +31,8 @@ class KanbanBoard {
         j['workspace_dir'] as String?,
         (j['column_count'] as num?)?.toInt() ?? 0,
         (j['card_count'] as num?)?.toInt() ?? 0,
+        projectId: j['project_id'] as String?,
+        effectiveWorkspaceDir: j['effective_workspace_dir'] as String?,
       );
 }
 

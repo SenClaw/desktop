@@ -15,7 +15,13 @@ class ApiException implements Exception {
   final String message;
   final String? code;
   final String? slot;
-  ApiException(this.status, this.message, {this.code, this.slot});
+
+  /// The whole decoded error body, when the daemon sent a JSON object. Routes
+  /// that explain a refusal with more than `error` carry it here — a rejected
+  /// project root lists its reasons, a stale context write returns the text
+  /// as it is now.
+  final Map<String, dynamic>? body;
+  ApiException(this.status, this.message, {this.code, this.slot, this.body});
   @override
   String toString() => 'ApiException($status): $message';
 }
@@ -52,6 +58,17 @@ class ApiClient {
   AppConfig _config;
   final http.Client _http;
 
+  static const _timeoutKey = #senclawApiTimeout;
+
+  /// Run [body] letting each request it makes take up to [limit] instead of
+  /// [kApiTimeout]. For the few calls the daemon legitimately answers late
+  /// (deleting a project with a large fact bank takes tens of seconds). A zone
+  /// value rather than a parameter on `delete`, because every test fake
+  /// `implements ApiClient` and a new named parameter would break each of them.
+  /// An explicit `timeout:` on a call still wins.
+  static Future<T> withTimeout<T>(Duration limit, Future<T> Function() body) =>
+      runZoned(body, zoneValues: {_timeoutKey: limit});
+
   /// Updated after `/api/config` discovery (wsPort/token may change).
   void updateConfig(AppConfig config) => _config = config;
 
@@ -85,7 +102,8 @@ class ApiClient {
     Map<String, dynamic>? query,
     Duration? timeout,
   }) async {
-    final limit = timeout ?? kApiTimeout;
+    final limit =
+        timeout ?? Zone.current[_timeoutKey] as Duration? ?? kApiTimeout;
     // The Dart `http` keep-alive pool can hand back a socket the daemon has
     // already half-closed, surfacing as "Connection closed before full header
     // was received". The request never reached the server, so retrying on a
@@ -119,15 +137,18 @@ class ApiClient {
       String msg = res.body;
       String? code;
       String? slot;
+      Map<String, dynamic>? errorBody;
       try {
         final decoded = jsonDecode(res.body);
         if (decoded is Map && decoded['error'] != null) {
           msg = decoded['error'].toString();
           code = decoded['code'] as String?;
           slot = decoded['slot'] as String?;
+          errorBody = decoded.cast<String, dynamic>();
         }
       } catch (_) {}
-      throw ApiException(res.statusCode, msg, code: code, slot: slot);
+      throw ApiException(res.statusCode, msg,
+          code: code, slot: slot, body: errorBody);
     }
     if (res.body.isEmpty) return null;
     try {

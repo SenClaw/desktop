@@ -14,7 +14,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/i18n/l10n.dart';
 import '../../core/transport/api_client.dart';
 import '../../core/transport/connection.dart';
+import '../../models/project.dart';
 import '../../theme/tokens.dart';
+import '../projects/projects_provider.dart' show projectNamesProvider;
 
 class MemoryFact {
   final String id;
@@ -30,6 +32,10 @@ class MemoryFact {
   /// The chat it was said in; only that chat recalls it. Empty means the whole
   /// agent (a fact from before chats were told apart).
   final String origin;
+
+  /// `manual` for a fact a person typed; otherwise what extracted it
+  /// (`reflection`, `compaction`, `kanban`). Empty when the daemon is older.
+  final String source;
   const MemoryFact({
     required this.id,
     required this.kind,
@@ -41,6 +47,7 @@ class MemoryFact {
     required this.proofCount,
     required this.supersededBy,
     required this.origin,
+    this.source = '',
   });
 
   factory MemoryFact.fromJson(Map<String, dynamic> j) => MemoryFact(
@@ -54,10 +61,14 @@ class MemoryFact {
     proofCount: (j['proofCount'] as num?)?.toInt() ?? 1,
     supersededBy: j['supersededBy'] as String?,
     origin: '${j['origin'] ?? ''}',
+    source: '${j['source'] ?? ''}',
   );
 
   /// A fact replaced because the person changed their mind.
   bool get replaced => supersededBy != null;
+
+  /// Typed by a person; no conversation replaces it.
+  bool get typed => source == 'manual';
 }
 
 class FactBank {
@@ -107,6 +118,19 @@ final factsProvider = FutureProvider.autoDispose
           .map((m) => MemoryFact.fromJson(m.cast<String, dynamic>()))
           .toList();
     });
+
+/// What a bank is called in a picker: an agent's folder as it is, a project's
+/// bank (`project:<id>`) by the project's name — or its id while the project
+/// list has not loaded, or for a project that no longer exists.
+String bankLabel(
+  BuildContext context,
+  String bank,
+  Map<String, String> projectNames,
+) {
+  final id = projectIdOfBank(bank);
+  if (id == null) return bank;
+  return context.trArgs('Project: {name}', {'name': projectNames[id] ?? id});
+}
 
 String _two(int n) => n.toString().padLeft(2, '0');
 String _isoDay(DateTime d) => '${d.year}-${_two(d.month)}-${_two(d.day)}';
@@ -214,6 +238,7 @@ class _FactsPanelState extends ConsumerState<FactsPanel> {
   Widget build(BuildContext context) {
     final c = context.colors;
     final banks = ref.watch(factBanksProvider);
+    final projectNames = ref.watch(projectNamesProvider);
     return banks.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => _notice(
@@ -259,7 +284,7 @@ class _FactsPanelState extends ConsumerState<FactsPanel> {
                         DropdownMenuItem(
                           value: b.bank,
                           child: Text(
-                            '${b.bank} · ${b.current}${b.replaced > 0 ? ' (+${b.replaced})' : ''}',
+                            '${bankLabel(context, b.bank, projectNames)} · ${b.current}${b.replaced > 0 ? ' (+${b.replaced})' : ''}',
                           ),
                         ),
                     ],
@@ -384,6 +409,8 @@ class _FactList extends ConsumerWidget {
             child: Text(
               query.q.trim().isNotEmpty
                   ? context.tr('No fact matches that search.')
+                  : projectIdOfBank(bank) != null
+                  ? context.tr('This project has no facts.')
                   : context.tr('This agent has no facts.'),
               style: TextStyle(color: c.textMuted),
             ),
@@ -393,17 +420,19 @@ class _FactList extends ConsumerWidget {
           itemCount: list.length,
           separatorBuilder: (_, _) => Divider(height: 1, color: c.border),
           itemBuilder: (_, i) =>
-              _FactRow(fact: list[i], onForget: () => onForget(list[i])),
+              FactRow(fact: list[i], onForget: () => onForget(list[i])),
         );
       },
     );
   }
 }
 
-class _FactRow extends StatelessWidget {
+/// One fact with its date, kind, evidence and a Forget button. Shared with the
+/// project's own Facts tab.
+class FactRow extends StatelessWidget {
   final MemoryFact fact;
   final VoidCallback onForget;
-  const _FactRow({required this.fact, required this.onForget});
+  const FactRow({super.key, required this.fact, required this.onForget});
 
   @override
   Widget build(BuildContext context) {
@@ -446,6 +475,20 @@ class _FactRow extends StatelessWidget {
                           'Said in this chat; only this chat recalls it.',
                         ),
                         child: _chip(fact.origin, AppTokens.cyan),
+                      ),
+                    if (fact.typed)
+                      Tooltip(
+                        message: context.tr(
+                          'Typed by hand; what a conversation says never replaces it.',
+                        ),
+                        child: _chip(context.tr('typed'), AppTokens.success),
+                      ),
+                    if (fact.source == 'kanban')
+                      Tooltip(
+                        message: context.tr(
+                          'Kept from a kanban card that a worker finished.',
+                        ),
+                        child: _chip('kanban', AppTokens.brandAlt),
                       ),
                     for (final e in fact.entities) _chip(e, c.textMuted),
                   ],

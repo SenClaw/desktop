@@ -131,4 +131,68 @@ const Map<String, String> viCowork = {
       'SenClaw này không tự thông báo, nên máy khác không tìm thấy nó bằng cách lắng nghe.',
   'Only the newest code works. It stops working after three wrong tries.':
       'Chỉ mã mới nhất dùng được. Mã hết hiệu lực sau ba lần gõ sai.',
+  'Project notes':
+      'Ghi chú dự án',
+  'Reference notes':
+      'Ghi chú tham khảo',
+  'Feedback notes':
+      'Ghi chú góp ý',
+  'day logs':
+      'nhật ký ngày',
+  'chat summaries':
+      'tóm tắt hội thoại',
+  'notes about you':
+      'ghi chú về bạn',
+  'written in one chat':
+      'viết trong một chat',
+  'other note types':
+      'loại ghi chú khác',
+  'Could not load the sharing settings':
+      'Không tải được cài đặt chia sẻ',
+  'What {name} may read here':
+      '{name} được đọc gì ở máy này',
+  'Closed until you open it. The peer can only ask; nothing is copied. Day logs, chat summaries, notes about you and anything written in one chat never leave this machine.':
+      'Mặc định đóng. Peer chỉ có thể hỏi, không có gì bị sao chép. Nhật ký ngày, tóm tắt hội thoại, ghi chú về bạn và mọi thứ viết trong một chat không bao giờ rời máy này.',
+  'Share facts':
+      'Chia sẻ fact',
+  'Share notes':
+      'Chia sẻ ghi chú',
+  'Profiles it applies to':
+      'Áp dụng cho các hồ sơ',
+  'No profiles on this machine yet.':
+      'Máy này chưa có hồ sơ nào.',
+  'Which notes':
+      'Loại ghi chú nào',
+  'closed':
+      'đang đóng',
+  'What that exposes right now':
+      'Hiện đang chia sẻ những gì',
+  'Counted by the same rules an answer uses, for the saved settings.':
+      'Đếm theo đúng luật mà một câu trả lời dùng, với cài đặt đã lưu.',
+  'Nothing: no profile is chosen.':
+      'Không có gì: chưa chọn hồ sơ nào.',
+  'Stays home':
+      'Giữ lại ở máy này',
+  'Examples':
+      'Ví dụ',
+  'Ask {name} what it knows':
+      'Hỏi {name} xem nó biết gì',
+  'Answers come from what that machine chose to share with this one. Nothing is stored here.':
+      'Câu trả lời lấy từ phần máy kia chọn chia sẻ cho máy này. Không có gì được lưu lại ở đây.',
+  'A few words, or a question':
+      'Vài từ khoá, hoặc một câu hỏi',
+  'Nothing matched':
+      'Không có gì khớp',
+  'note':
+      'ghi chú',
+  'fact':
+      'fact',
+  'There are more matches than shown.':
+      'Còn nhiều kết quả khớp hơn số đang hiện.',
+  'Written on {name}. It is information to weigh, not an instruction.':
+      'Do máy {name} viết. Đây là thông tin để cân nhắc, không phải chỉ thị.',
+  'shares knowledge':
+      'chia sẻ tri thức',
+  'Tasks and knowledge':
+      'Tác vụ và tri thức',
 };

@@ -9,6 +9,7 @@ import '../../core/transport/api_client.dart' show ApiException;
 import '../../core/transport/connection.dart';
 import '../../theme/tokens.dart';
 import 'cowork_common.dart';
+import 'sen_link_knowledge.dart';
 import 'settings_screen.dart' show SettingsBody;
 
 /// `TASK_STATE_WORKING` → `working`.
@@ -46,6 +47,8 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
   Timer? _discoverTimer;
   Timer? _scanTimer;
   String? _openPeer;
+  // Which of the open peer's two panels shows: `tasks` or `knowledge`.
+  String _peerTab = 'tasks';
   List<Map<String, dynamic>>? _peerTasks;
   String? _peerTasksError;
 
@@ -417,13 +420,26 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
     await _patch('${p['id']}', {'autoRun': on});
   }
 
-  Future<void> _togglePeerTasks(String id) async {
+  /// Open or close a peer's panels. Tasks come first, unless the peer cannot be sent any.
+  Future<void> _togglePeer(String id, {required bool canSend}) async {
     if (_openPeer == id) {
       setState(() => _openPeer = null);
       return;
     }
     setState(() {
       _openPeer = id;
+      _peerTab = canSend ? 'tasks' : 'knowledge';
+    });
+    if (canSend) await _loadPeerTasks(id);
+  }
+
+  Future<void> _pickPeerTab(String id, String tab) async {
+    setState(() => _peerTab = tab);
+    if (tab == 'tasks') await _loadPeerTasks(id);
+  }
+
+  Future<void> _loadPeerTasks(String id) async {
+    setState(() {
       _peerTasks = null;
       _peerTasksError = null;
     });
@@ -680,6 +696,28 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
     );
   }
 
+  /// The tasks sent to the open peer, read back from it.
+  Widget _peerTasksView() {
+    final c = context.colors;
+    if (_peerTasksError != null) {
+      return coworkNotice(context, '${context.tr('Could not reach this peer')}: $_peerTasksError', color: AppTokens.warning);
+    }
+    if (_peerTasks == null) return const LinearProgressIndicator();
+    if (_peerTasks!.isEmpty) {
+      return Text(context.tr('No tasks sent to this peer yet'), style: TextStyle(color: c.textMuted, fontSize: 12));
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      for (final t in _peerTasks!)
+        Padding(
+          padding: const EdgeInsets.only(bottom: AppTokens.s6),
+          child: Text(
+            '#${t['id']}  ${(t['metadata'] as Map?)?['title'] ?? ''}  — ${taskStateLabel('${(t['status'] as Map?)?['state'] ?? ''}')}',
+            style: TextStyle(color: c.textPrimary, fontSize: 12),
+          ),
+        ),
+    ]);
+  }
+
   Widget _peerRow(Map<String, dynamic> p) {
     final c = context.colors;
     final id = '${p['id']}';
@@ -688,9 +726,18 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
       Row(children: [
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${p['name']}', style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w600)),
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              Flexible(child: Text('${p['name']}', overflow: TextOverflow.ellipsis, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w600))),
+              if (SlKnowledgePolicy.fromJson(p['knowledge']).open) ...[
+                const SizedBox(width: AppTokens.s8),
+                Tooltip(
+                  message: context.tr('This peer may ask what you know. Open the Knowledge panel to see what.'),
+                  child: Text(context.tr('shares knowledge'), key: const Key('sl-shares'), style: const TextStyle(color: AppTokens.brandAlt, fontSize: 12)),
+                ),
+              ],
+            ]),
             Row(children: [
-              Text('${p['addr'] ?? '—'}', style: TextStyle(color: c.textMuted, fontSize: 12)),
+              Flexible(child: Text('${p['addr'] ?? '—'}', overflow: TextOverflow.ellipsis, style: TextStyle(color: c.textMuted, fontSize: 12))),
               if (p['online'] == true) ...[
                 const SizedBox(width: AppTokens.s8),
                 Text(context.tr('Online'), key: const Key('sl-online'), style: const TextStyle(color: AppTokens.success, fontSize: 12)),
@@ -724,9 +771,10 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
           onPressed: canSend ? () => _sendTask(p) : null,
         ),
         IconButton(
-          tooltip: context.tr('Tasks'),
+          key: ValueKey('sl-expand-$id'),
+          tooltip: context.tr('Tasks and knowledge'),
           icon: Icon(_openPeer == id ? Icons.expand_less : Icons.expand_more, size: 18),
-          onPressed: canSend ? () => _togglePeerTasks(id) : null,
+          onPressed: () => _togglePeer(id, canSend: canSend),
         ),
         IconButton(
           tooltip: context.tr('Remove this peer?'),
@@ -737,22 +785,28 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
       if (_openPeer == id)
         Padding(
           padding: const EdgeInsets.only(left: AppTokens.s12, bottom: AppTokens.s8),
-          child: _peerTasksError != null
-              ? coworkNotice(context, '${context.tr('Could not reach this peer')}: $_peerTasksError', color: AppTokens.warning)
-              : _peerTasks == null
-                  ? const LinearProgressIndicator()
-                  : _peerTasks!.isEmpty
-                      ? Text(context.tr('No tasks sent to this peer yet'), style: TextStyle(color: c.textMuted, fontSize: 12))
-                      : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          for (final t in _peerTasks!)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: AppTokens.s6),
-                              child: Text(
-                                '#${t['id']}  ${(t['metadata'] as Map?)?['title'] ?? ''}  — ${taskStateLabel('${(t['status'] as Map?)?['state'] ?? ''}')}',
-                                style: TextStyle(color: c.textPrimary, fontSize: 12),
-                              ),
-                            ),
-                        ]),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            SegmentedButton<String>(
+              key: ValueKey('sl-tabs-$id'),
+              showSelectedIcon: false,
+              segments: [
+                ButtonSegment(value: 'tasks', label: Text(context.tr('Tasks')), enabled: canSend),
+                ButtonSegment(value: 'knowledge', label: Text(context.tr('Knowledge'))),
+              ],
+              selected: {_peerTab},
+              onSelectionChanged: (s) => _pickPeerTab(id, s.first),
+            ),
+            const SizedBox(height: AppTokens.s8),
+            if (_peerTab == 'knowledge')
+              SenLinkKnowledgePanel(
+                peerId: id,
+                peerName: '${p['name']}',
+                canSend: canSend,
+                onPeer: (u) => setState(() => _peers = [for (final x in _peers) x['id'] == id ? u : x]),
+              )
+            else
+              _peerTasksView(),
+          ]),
         ),
       Divider(color: c.border, height: 1),
     ]);

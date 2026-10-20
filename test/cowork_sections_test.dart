@@ -6,6 +6,7 @@ import 'package:senclaw_desktop/core/config/app_config.dart';
 import 'package:senclaw_desktop/core/i18n/l10n.dart';
 import 'package:senclaw_desktop/core/transport/api_client.dart';
 import 'package:senclaw_desktop/core/transport/connection.dart';
+import 'package:senclaw_desktop/features/settings/sen_link_knowledge.dart';
 import 'package:senclaw_desktop/features/settings/sen_link_section.dart';
 import 'package:senclaw_desktop/theme/app_theme.dart';
 
@@ -51,6 +52,14 @@ class _FakeApi implements ApiClient {
     'found': <Map<String, dynamic>>[],
   };
   String scanStateNext = 'done';
+  /// `GET /peers/p1/knowledge` fails like a daemon that predates the feature.
+  bool knowledgeMissing = false;
+  /// What `POST /peers/p1/recall` answers with an error, when set.
+  String? recallError;
+  List<Map<String, dynamic>> recallHits = [
+    {'kind': 'fact', 'profile': 'main', 'text': 'The harbour office lease ends in March', 'when': '2025-10-09'},
+    {'kind': 'note', 'profile': 'main', 'title': 'harbour berth fees', 'type': 'reference', 'text': 'Berth fees are paid quarterly', 'when': '2026-07-12'},
+  ];
   List<Map<String, dynamic>> peers = [
     {
       'id': 'p1',
@@ -89,7 +98,34 @@ class _FakeApi implements ApiClient {
       '/api/sen-link/discovered' => {'discovered': discovered, 'browsing': true, 'advertising': true, 'error': null},
       '/api/sen-link/scan/s1' => {...scanJob, 'state': scanStateNext, 'scanned': 254, 'found': discovered.isEmpty ? [] : [discovered.first]},
       '/api/sen-link/peers' => {'peers': peers},
+      '/api/sen-link/peers/p1/knowledge' => _knowledgeView(),
       _ => <String, dynamic>{},
+    };
+  }
+
+  Map<String, dynamic> _knowledgeView() {
+    if (knowledgeMissing) throw ApiException(404, 'not found');
+    final policy = (peers.first['knowledge'] as Map?)?.cast<String, dynamic>() ??
+        {'facts': false, 'notes': false, 'profiles': <String>[], 'noteTypes': <String>[]};
+    final open = (policy['facts'] == true || policy['notes'] == true) && (policy['profiles'] as List).isNotEmpty;
+    return {
+      'policy': policy,
+      'preview': {
+        'open': open,
+        'profiles': [
+          for (final p in policy['profiles'] as List)
+            {
+              'profile': p,
+              'exists': true,
+              'facts': policy['facts'] == true ? 1 : 0,
+              'notes': policy['notes'] == true ? {'reference': 2} : <String, dynamic>{},
+              'samples': ['harbour fees'],
+              'excluded': {'dailyLogs': 3, 'conversationSummaries': 1, 'aboutTheOwner': 1, 'writtenInOneChat': 0, 'otherTypes': 0},
+            }
+        ],
+      },
+      'profiles': ['main', 'other'],
+      'noteTypes': ['project', 'reference', 'feedback'],
     };
   }
 
@@ -119,6 +155,10 @@ class _FakeApi implements ApiClient {
         'listening': listenError == null,
         'listenError': listenError,
       };
+    }
+    if (path == '/api/sen-link/peers/p1/recall') {
+      if (recallError != null) throw ApiException(502, recallError!);
+      return {'v': 1, 'hits': recallHits, 'truncated': false, 'from': 'SenClaw B', 'untrusted': true};
     }
     if (path == '/api/sen-link/probe') return probeReply;
     if (path == '/api/sen-link/scan') return scanJob;
@@ -156,6 +196,14 @@ Future<void> _pump(WidgetTester tester, _FakeApi fake, Widget section) async {
       home: Scaffold(body: section),
     ),
   ));
+  await tester.pumpAndSettle();
+}
+
+/// Open peer `p1`'s row and switch to its Knowledge panel.
+Future<void> _openKnowledge(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('sl-expand-p1')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.descendant(of: find.byKey(const ValueKey('sl-tabs-p1')), matching: find.text('Knowledge')));
   await tester.pumpAndSettle();
 }
 
@@ -416,6 +464,114 @@ void main() {
     expect(find.byKey(const Key('sl-online')), findsOneWidget);
     expect(find.byKey(const Key('sl-legacy')), findsNothing);
     await _unmount(tester);
+  });
+
+  testWidgets('SLink knowledge: closed until saved; a policy is chosen, saved, and previewed by the daemon\'s own counts', (tester) async {
+    final fake = _FakeApi(linkEnabled: true);
+    await _pump(tester, fake, const SenLinkSection());
+    expect(find.byKey(const Key('sl-shares')), findsNothing);
+
+    await _openKnowledge(tester);
+    expect(find.byKey(const Key('sl-k-closed')), findsOneWidget);
+    expect(find.byKey(const Key('sl-k-nothing')), findsOneWidget);
+    FilledButton save() => tester.widget<FilledButton>(find.byKey(const Key('sl-k-save')));
+    expect(save().onPressed, isNull, reason: 'nothing to save yet');
+    expect(find.byKey(const ValueKey('sl-k-type-project')), findsNothing, reason: 'note types show once notes are on');
+
+    await tester.tap(find.byKey(const Key('sl-k-facts')));
+    await tester.tap(find.byKey(const Key('sl-k-notes')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('sl-k-profile-main')));
+    await tester.pumpAndSettle();
+    expect(save().onPressed, isNotNull);
+    // The defaults are shown as ticked, and feedback is not one of them.
+    expect(tester.widget<FilterChip>(find.byKey(const ValueKey('sl-k-type-reference'))).selected, isTrue);
+    expect(tester.widget<FilterChip>(find.byKey(const ValueKey('sl-k-type-feedback'))).selected, isFalse);
+
+    await tester.tap(find.byKey(const Key('sl-k-save')));
+    await tester.pumpAndSettle();
+    final patch = fake.calls.lastWhere((c) => c.$1 == 'PATCH /api/sen-link/peers/p1').$2 as Map;
+    expect(patch['knowledge'], {'facts': true, 'notes': true, 'profiles': ['main'], 'noteTypes': ['project', 'reference']},
+        reason: 'the shown note types are sent explicitly');
+    expect(find.byKey(const Key('sl-k-closed')), findsNothing);
+    expect(find.byKey(const Key('sl-shares')), findsOneWidget, reason: 'the row says it is sharing');
+    expect(find.byKey(const ValueKey('sl-k-preview-main')), findsOneWidget);
+    expect(find.textContaining('day logs 3'), findsOneWidget, reason: 'what stays home is the daemon\'s count');
+    expect(find.textContaining('harbour fees'), findsOneWidget);
+    expect(save().onPressed, isNull, reason: 'saved settings leave nothing to save');
+    await _unmount(tester);
+  });
+
+  testWidgets('SLink knowledge: Revert drops an edit; clearing the profiles closes it again', (tester) async {
+    final fake = _FakeApi(linkEnabled: true)
+      ..peers = [
+        {..._FakeApi().peers.first, 'knowledge': {'facts': true, 'notes': false, 'profiles': ['main'], 'noteTypes': <String>[]}}
+      ];
+    await _pump(tester, fake, const SenLinkSection());
+    expect(find.byKey(const Key('sl-shares')), findsOneWidget);
+    await _openKnowledge(tester);
+    expect(tester.widget<FilterChip>(find.byKey(const ValueKey('sl-k-profile-main'))).selected, isTrue);
+
+    await tester.tap(find.byKey(const Key('sl-k-notes')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sl-k-revert')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Switch>(find.byKey(const Key('sl-k-notes'))).value, isFalse);
+
+    await tester.tap(find.byKey(const ValueKey('sl-k-profile-main')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sl-k-save')));
+    await tester.pumpAndSettle();
+    expect((fake.calls.lastWhere((c) => c.$1 == 'PATCH /api/sen-link/peers/p1').$2 as Map)['knowledge']['profiles'], isEmpty);
+    expect(find.byKey(const Key('sl-shares')), findsNothing);
+    expect(find.byKey(const Key('sl-k-closed')), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('SLink knowledge: asking shows the answers as words from another machine; a refusal shows the daemon\'s sentence', (tester) async {
+    final fake = _FakeApi(linkEnabled: true);
+    await _pump(tester, fake, const SenLinkSection());
+    await _openKnowledge(tester);
+
+    await tester.enterText(find.byKey(const Key('sl-k-question')), 'harbour');
+    await tester.tap(find.byKey(const Key('sl-k-ask')));
+    await tester.pumpAndSettle();
+    expect(fake.calls.lastWhere((c) => c.$1 == 'POST /api/sen-link/peers/p1/recall').$2, {'query': 'harbour'});
+    expect(find.byKey(const ValueKey('sl-k-hit-0')), findsOneWidget);
+    expect(find.textContaining('lease ends in March'), findsOneWidget);
+    expect(find.textContaining('harbour berth fees'), findsOneWidget);
+    expect(find.byKey(const Key('sl-k-untrusted')), findsOneWidget);
+
+    fake.recallError = '`SenClaw B` has not shared its knowledge with this machine; its owner can allow it in Settings → SLink';
+    await tester.tap(find.byKey(const Key('sl-k-ask')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('has not shared its knowledge'), findsOneWidget);
+    expect(find.byKey(const ValueKey('sl-k-hit-0')), findsNothing, reason: 'the old answer is gone');
+
+    fake.recallError = null;
+    fake.recallHits = [];
+    await tester.tap(find.byKey(const Key('sl-k-ask')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('sl-k-nomatch')), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('SLink knowledge: a daemon that predates the feature says so instead of showing a dead form', (tester) async {
+    final fake = _FakeApi(linkEnabled: true)..knowledgeMissing = true;
+    await _pump(tester, fake, const SenLinkSection());
+    await _openKnowledge(tester);
+    expect(find.textContaining('Could not load the sharing settings'), findsOneWidget);
+    expect(find.byKey(const Key('sl-k-facts')), findsNothing);
+    await _unmount(tester);
+  });
+
+  test('a policy reads as closed when the daemon sends none, and compares without regard to order', () {
+    expect(SlKnowledgePolicy.fromJson(null).open, isFalse);
+    expect(SlKnowledgePolicy.fromJson({'facts': true}).open, isFalse, reason: 'a switch with no profile shares nothing');
+    final a = SlKnowledgePolicy.fromJson({'facts': true, 'profiles': ['b', 'a'], 'noteTypes': ['reference', 'project']});
+    expect(a.sameAs(SlKnowledgePolicy.fromJson({'facts': true, 'profiles': ['a', 'b'], 'noteTypes': ['project', 'reference']})), isTrue);
+    expect(a.open, isTrue);
+    expect(const SlKnowledgePolicy(notes: true).shownTypes, ['project', 'reference']);
   });
 
   test('task states read as words', () {

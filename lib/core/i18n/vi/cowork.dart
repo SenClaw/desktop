@@ -129,4 +129,6 @@ const Map<String, String> viCowork = {
       'quét',
   'This SenClaw is not announcing itself, so others will not find it by listening.':
       'SenClaw này không tự thông báo, nên máy khác không tìm thấy nó bằng cách lắng nghe.',
+  'Only the newest code works. It stops working after three wrong tries.':
+      'Chỉ mã mới nhất dùng được. Mã hết hiệu lực sau ba lần gõ sai.',
 };

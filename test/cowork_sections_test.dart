@@ -197,6 +197,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('K7MQ2XRP'), findsOneWidget);
     expect(find.text('Type this on the other SenClaw:'), findsOneWidget);
+    expect(find.byKey(const Key('sl-invite-note')), findsOneWidget, reason: 'one code at a time, three tries');
     expect(find.text('192.168.1.20:18791'), findsNWidgets(2), reason: 'once in settings, once beside the invite');
     await _unmount(tester);
   });

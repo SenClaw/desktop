@@ -614,6 +614,12 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
                   ),
                 ],
               ]),
+              if (_invite != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: AppTokens.s4),
+                  child: Text(context.tr('Only the newest code works. It stops working after three wrong tries.'),
+                      key: const Key('sl-invite-note'), style: TextStyle(color: c.textMuted, fontSize: 12)),
+                ),
               if (_invite != null && !_invite!.listening)
                 coworkNotice(context, _invite!.listenError ?? context.tr('SLink is not listening, so the other SenClaw cannot reach this one.'),
                     color: AppTokens.warning),

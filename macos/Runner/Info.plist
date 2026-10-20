@@ -32,6 +32,15 @@
 	<string>NSApplication</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>SenClaw uses the microphone for voice input (speech-to-text).</string>
+	<!-- SLink finds the other SenClaws on the local network by Bonjour and reaches
+	     them over plain TCP. macOS 15 asks the user once, and shows this text;
+	     without NSBonjourServices the browse silently finds nothing. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>SenClaw uses the local network to find your other SenClaws (SLink) and to hand tasks to them.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_senclaw-link._tcp</string>
+	</array>
 	<!-- Allow the embedded WKWebView to load Space apps over http://127.0.0.1 -->
 	<key>NSAppTransportSecurity</key>
 	<dict>

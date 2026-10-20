@@ -38,6 +38,19 @@ class _FakeApi implements ApiClient {
     'error': null,
   };
   final calls = <(String, Object?)>[];
+  /// What `GET /discovered` says, and the scan that `POST /scan` starts.
+  List<Map<String, dynamic>> discovered = [];
+  Map<String, dynamic> scanJob = {
+    'scanId': 's1',
+    'state': 'running',
+    'scanned': 100,
+    'total': 254,
+    'port': 18791,
+    'ranges': ['192.168.0.0/24'],
+    'notes': <String>[],
+    'found': <Map<String, dynamic>>[],
+  };
+  String scanStateNext = 'done';
   List<Map<String, dynamic>> peers = [
     {
       'id': 'p1',
@@ -47,6 +60,7 @@ class _FakeApi implements ApiClient {
       'autoRun': false,
       'assignee': null,
       'legacy': true,
+      'online': false,
       'createdAt': '2026-10-10T00:00:00Z',
     }
   ];
@@ -70,7 +84,10 @@ class _FakeApi implements ApiClient {
           'listenError': listenError,
           'addresses': ['192.168.1.20', 'fd7a:115c:a1e0::5'],
           'migrated': migrated,
+          'discovery': {'browsing': true, 'advertising': linkEnabled && listenError == null, 'error': null},
         },
+      '/api/sen-link/discovered' => {'discovered': discovered, 'browsing': true, 'advertising': true, 'error': null},
+      '/api/sen-link/scan/s1' => {...scanJob, 'state': scanStateNext, 'scanned': 254, 'found': discovered.isEmpty ? [] : [discovered.first]},
       '/api/sen-link/peers' => {'peers': peers},
       _ => <String, dynamic>{},
     };
@@ -104,6 +121,8 @@ class _FakeApi implements ApiClient {
       };
     }
     if (path == '/api/sen-link/probe') return probeReply;
+    if (path == '/api/sen-link/scan') return scanJob;
+    if (path == '/api/sen-link/scan/s1/cancel') return {...scanJob, 'state': 'canceled'};
     if (path == '/api/sen-link/peers/pair') return {...peers.first, 'name': 'SenClaw C', 'addr': 'mac-mini.local:18791', 'legacy': false};
     return <String, dynamic>{};
   }
@@ -295,6 +314,106 @@ void main() {
     await tester.tap(find.byKey(const Key('sl-migrated-close')));
     await tester.pumpAndSettle();
     expect(find.textContaining('Mac mini, Office PC'), findsNothing);
+    await _unmount(tester);
+  });
+
+  Map<String, dynamic> seen({bool pairable = true}) => {
+        'daemonId': '6f1c-0a',
+        'name': 'Mac mini',
+        'addrs': ['192.168.1.20', 'fd00::20'],
+        'port': 18791,
+        'pairable': pairable,
+        'sources': ['mdns'],
+        'seenSecsAgo': 3,
+      };
+
+  testWidgets('SLink: a SenClaw the network showed is listed, and Use puts it in the form and checks it', (tester) async {
+    final fake = _FakeApi(linkEnabled: true)..discovered = [seen()];
+    await _pump(tester, fake, const SenLinkSection());
+    expect(find.text('Nearby SenClaws'), findsOneWidget);
+    expect(find.text('Mac mini'), findsOneWidget);
+    expect(find.text('192.168.1.20:18791'), findsWidgets);
+    expect(find.text('has an invite'), findsOneWidget);
+    expect(find.text('announced'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('sl-use-6f1c-0a')));
+    await tester.tap(find.byKey(const Key('sl-use-6f1c-0a')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byKey(const Key('sl-pair-addr'))).controller!.text, '192.168.1.20:18791');
+    expect(fake.calls.lastWhere((c) => c.$1 == 'POST /api/sen-link/probe').$2, {'addr': '192.168.1.20:18791'});
+    expect(find.textContaining('Found Mac mini'), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('SLink: nothing seen says how it will show up; with SLink off the scan is closed', (tester) async {
+    final on = _FakeApi(linkEnabled: true);
+    await _pump(tester, on, const SenLinkSection());
+    expect(find.textContaining('No other SenClaw seen yet'), findsOneWidget);
+    expect(tester.widget<OutlinedButton>(find.byKey(const Key('sl-scan'))).onPressed, isNotNull);
+    await _unmount(tester);
+
+    final off = _FakeApi(linkEnabled: false);
+    await _pump(tester, off, const SenLinkSection());
+    expect(find.text('Enable SLink to find other SenClaws.'), findsOneWidget);
+    expect(tester.widget<OutlinedButton>(find.byKey(const Key('sl-scan'))).onPressed, isNull);
+    expect(off.calls.where((c) => c.$1 == 'GET /api/sen-link/discovered'), isEmpty, reason: 'no polling while SLink is off');
+    await _unmount(tester);
+  });
+
+  testWidgets('SLink: a scan shows progress, ends with a summary, and refreshes the list', (tester) async {
+    final fake = _FakeApi(linkEnabled: true);
+    await _pump(tester, fake, const SenLinkSection());
+    await tester.ensureVisible(find.byKey(const Key('sl-scan')));
+    await tester.tap(find.byKey(const Key('sl-scan')));
+    await tester.pump();
+    await tester.pump();
+    expect(fake.calls.last.$1, 'POST /api/sen-link/scan');
+    expect(find.byKey(const Key('sl-scan-progress')), findsOneWidget);
+    expect(find.text('100/254'), findsOneWidget);
+    expect(tester.widget<OutlinedButton>(find.byKey(const Key('sl-scan'))).onPressed, isNull, reason: 'one scan at a time');
+
+    // The scan ends and finds a SenClaw: the next poll says so and the list is read again.
+    fake.discovered = [seen(pairable: false)];
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('sl-scan-progress')), findsNothing);
+    expect(find.text('Scan finished: 1 found on 192.168.0.0/24.'), findsOneWidget);
+    expect(find.text('Mac mini'), findsOneWidget);
+    final polls = fake.calls.where((c) => c.$1 == 'GET /api/sen-link/scan/s1').length;
+    await tester.pump(const Duration(seconds: 3));
+    expect(fake.calls.where((c) => c.$1 == 'GET /api/sen-link/scan/s1').length, polls, reason: 'polling stopped with the scan');
+    await _unmount(tester);
+  });
+
+  testWidgets('SLink: a running scan can be canceled, and a scan that found nothing says where it looked', (tester) async {
+    final fake = _FakeApi(linkEnabled: true);
+    await _pump(tester, fake, const SenLinkSection());
+    await tester.ensureVisible(find.byKey(const Key('sl-scan')));
+    await tester.tap(find.byKey(const Key('sl-scan')));
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('sl-scan-cancel')));
+    await tester.pump();
+    await tester.pump();
+    expect(fake.calls.last.$1, 'POST /api/sen-link/scan/s1/cancel');
+    expect(find.text('Scan canceled.'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+
+    // A second scan ends with nothing found.
+    await tester.tap(find.byKey(const Key('sl-scan')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pump();
+    expect(find.text('Scan finished: no SenClaw on 192.168.0.0/24.'), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('SLink: a peer the network has seen is marked online', (tester) async {
+    final fake = _FakeApi(linkEnabled: true)..peers = [{..._FakeApi().peers.first, 'online': true, 'legacy': false}];
+    await _pump(tester, fake, const SenLinkSection());
+    expect(find.byKey(const Key('sl-online')), findsOneWidget);
+    expect(find.byKey(const Key('sl-legacy')), findsNothing);
     await _unmount(tester);
   });
 

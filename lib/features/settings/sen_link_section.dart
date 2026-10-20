@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -38,6 +40,11 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
   ({String code, int expiresAt, int port, List<String> addresses, bool listening, String? listenError})? _invite;
   Map<String, dynamic>? _probe;
   bool _probing = false;
+  List<Map<String, dynamic>> _discovered = const [];
+  Map<String, dynamic>? _scan;
+  // Polls start only while something is worth polling and end in dispose.
+  Timer? _discoverTimer;
+  Timer? _scanTimer;
   String? _openPeer;
   List<Map<String, dynamic>>? _peerTasks;
   String? _peerTasksError;
@@ -54,6 +61,8 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
 
   @override
   void dispose() {
+    _discoverTimer?.cancel();
+    _scanTimer?.cancel();
     for (final c in [_name, _desc, _board, _workspace, _assignee, _listenHost, _listenPort, _pairAddr, _pairCode]) {
       c.dispose();
     }
@@ -82,9 +91,85 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
         _peers = _maps(peers['peers']);
         _loadError = null;
       });
+      _syncDiscoveryPolling();
     } catch (e) {
       if (mounted) setState(() => _loadError = _err(e));
     }
+  }
+
+  /// What the network shows changes by itself, so look again every few seconds
+  /// while SLink is on and this screen is open.
+  void _syncDiscoveryPolling() {
+    final on = _settings?['enabled'] == true;
+    if (on && _discoverTimer == null) {
+      _discoverTimer = Timer.periodic(const Duration(seconds: 5), (_) => _loadDiscovered());
+      _loadDiscovered();
+    } else if (!on) {
+      _discoverTimer?.cancel();
+      _discoverTimer = null;
+    }
+  }
+
+  Future<void> _loadDiscovered() async {
+    try {
+      final r = (await ref.read(apiClientProvider).get('/api/sen-link/discovered') as Map);
+      if (mounted) setState(() => _discovered = _maps(r['discovered']));
+    } catch (_) {
+      // The list is a convenience; a missed look is simply retried.
+    }
+  }
+
+  Future<void> _startScan() async {
+    try {
+      final r = (await ref.read(apiClientProvider).post('/api/sen-link/scan', body: <String, dynamic>{}) as Map).cast<String, dynamic>();
+      if (!mounted) return;
+      setState(() => _scan = r);
+      _scanTimer?.cancel();
+      _scanTimer = Timer.periodic(const Duration(milliseconds: 700), (_) => _pollScan());
+    } catch (e) {
+      _snack(_err(e));
+    }
+  }
+
+  Future<void> _pollScan() async {
+    final id = _scan?['scanId'];
+    if (id == null) return;
+    try {
+      final r = (await ref.read(apiClientProvider).get('/api/sen-link/scan/$id') as Map).cast<String, dynamic>();
+      if (!mounted) return;
+      setState(() => _scan = r);
+      if (r['state'] != 'running') {
+        _scanTimer?.cancel();
+        _scanTimer = null;
+        await _loadDiscovered();
+      }
+    } catch (e) {
+      _scanTimer?.cancel();
+      _scanTimer = null;
+      _snack(_err(e));
+    }
+  }
+
+  Future<void> _cancelScan() async {
+    final id = _scan?['scanId'];
+    if (id == null) return;
+    try {
+      final r = (await ref.read(apiClientProvider).post('/api/sen-link/scan/$id/cancel') as Map).cast<String, dynamic>();
+      if (mounted) setState(() => _scan = r);
+    } catch (e) {
+      _snack(_err(e));
+    }
+  }
+
+  /// Put a discovered SLink's address in the form and check it.
+  Future<void> _use(Map<String, dynamic> d) async {
+    final addrs = (d['addrs'] as List?) ?? const [];
+    if (addrs.isEmpty) return;
+    setState(() {
+      _pairAddr.text = slHostPort('${addrs.first}', (d['port'] as num).toInt());
+      _probe = null;
+    });
+    await _check();
   }
 
   void _apply(Map<String, dynamic> s) {
@@ -182,6 +267,85 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
     } catch (e) {
       _snack(_err(e));
     }
+  }
+
+  /// The SLinks the network has shown, a scan button, and each found one a tap away from the form.
+  Widget _nearby() {
+    final c = context.colors;
+    final enabled = _settings?['enabled'] == true;
+    final scan = _scan;
+    final running = scan?['state'] == 'running';
+    final notes = [for (final n in (scan?['notes'] as List?) ?? const []) '$n'].join(' ');
+    final ranges = [for (final r in (scan?['ranges'] as List?) ?? const []) '$r'].join(', ');
+    final found = ((scan?['found'] as List?) ?? const []).length;
+    final discovery = (_status['discovery'] as Map?) ?? const {};
+    final discoveryError = discovery['error'] as String?;
+    final notAnnouncing = enabled && _discoverable && _status['listening'] != null && discovery['advertising'] != true;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Wrap(spacing: AppTokens.s8, runSpacing: AppTokens.s8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        Text(context.tr('Nearby SenClaws'), style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
+        Tooltip(
+          message: context.tr('A scan tries to connect to the SLink port on every address of this machine\'s networks. Some company networks flag that.'),
+          child: OutlinedButton(
+            key: const Key('sl-scan'),
+            onPressed: enabled && !running ? _startScan : null,
+            child: Text(context.tr('Scan network')),
+          ),
+        ),
+        if (running)
+          OutlinedButton(key: const Key('sl-scan-cancel'), onPressed: _cancelScan, child: Text(context.tr('Cancel'))),
+      ]),
+      if (running && scan != null) ...[
+        const SizedBox(height: AppTokens.s8),
+        LinearProgressIndicator(
+          key: const Key('sl-scan-progress'),
+          value: ((scan['total'] as num?) ?? 0) > 0 ? ((scan['scanned'] as num).toDouble() / (scan['total'] as num).toDouble()) : null,
+        ),
+        Text('${scan['scanned']}/${scan['total']}', style: TextStyle(color: c.textMuted, fontSize: 12)),
+      ],
+      if (notes.isNotEmpty) ...[const SizedBox(height: AppTokens.s8), coworkNotice(context, notes)],
+      if (scan != null && !running)
+        Padding(
+          padding: const EdgeInsets.only(top: AppTokens.s8),
+          child: Text(
+            key: const Key('sl-scan-summary'),
+            scan['state'] == 'canceled'
+                ? context.tr('Scan canceled.')
+                : found == 0
+                    ? context.trArgs('Scan finished: no SenClaw on {ranges}.', {'ranges': ranges})
+                    : context.trArgs('Scan finished: {n} found on {ranges}.', {'n': found, 'ranges': ranges}),
+            style: TextStyle(color: c.textMuted, fontSize: 12),
+          ),
+        ),
+      if (discoveryError != null && enabled) ...[
+        const SizedBox(height: AppTokens.s8),
+        coworkNotice(context, context.trArgs('Finding SenClaws by announcement is not working: {error}', {'error': discoveryError}), color: AppTokens.warning),
+      ],
+      const SizedBox(height: AppTokens.s8),
+      if (_discovered.isEmpty)
+        Text(
+          enabled
+              ? context.tr('No other SenClaw seen yet. They show up here when they announce themselves on this network; or scan, or type an address.')
+              : context.tr('Enable SLink to find other SenClaws.'),
+          style: TextStyle(color: c.textMuted, fontSize: 12),
+        )
+      else
+        for (final d in _discovered)
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppTokens.s4),
+            child: Wrap(spacing: AppTokens.s8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              Text('${d['name']}', style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w600)),
+              Text(slHostPort('${((d['addrs'] as List?) ?? const ['']).first}', (d['port'] as num).toInt()),
+                  style: TextStyle(fontFamily: AppTokens.fontMono, fontSize: 12, color: c.textMuted)),
+              if (d['pairable'] == true) Text(context.tr('has an invite'), style: const TextStyle(color: AppTokens.success, fontSize: 12)),
+              for (final src in (d['sources'] as List?) ?? const [])
+                Text(src == 'mdns' ? context.tr('announced') : context.tr('scan'), style: TextStyle(color: c.textMuted, fontSize: 12)),
+              TextButton(key: Key('sl-use-${d['daemonId']}'), onPressed: () => _use(d), child: Text(context.tr('Use'))),
+            ]),
+          ),
+      if (notAnnouncing)
+        Text(context.tr('This SenClaw is not announcing itself, so others will not find it by listening.'), style: TextStyle(color: c.textMuted, fontSize: 12)),
+    ]);
   }
 
   /// What a probe found, in a sentence a person can act on.
@@ -461,6 +625,8 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
                 ]),
               ],
               const SizedBox(height: AppTokens.s12),
+              _nearby(),
+              const SizedBox(height: AppTokens.s12),
               Wrap(spacing: AppTokens.s8, runSpacing: AppTokens.s8, crossAxisAlignment: WrapCrossAlignment.center, children: [
                 SizedBox(
                     width: 340,
@@ -519,6 +685,10 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
             Text('${p['name']}', style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w600)),
             Row(children: [
               Text('${p['addr'] ?? '—'}', style: TextStyle(color: c.textMuted, fontSize: 12)),
+              if (p['online'] == true) ...[
+                const SizedBox(width: AppTokens.s8),
+                Text(context.tr('Online'), key: const Key('sl-online'), style: const TextStyle(color: AppTokens.success, fontSize: 12)),
+              ],
               if (p['legacy'] == true) ...[
                 const SizedBox(width: AppTokens.s8),
                 Tooltip(

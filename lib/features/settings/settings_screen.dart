@@ -66,7 +66,7 @@ const _sections = [
   ('ocr', 'OCR', Icons.document_scanner_outlined),
   ('decision', 'Decision (Laya)', Icons.alt_route),
   ('browser', 'Browser', Icons.web_outlined),
-  ('sen-link', 'sen-link', Icons.hub_outlined),
+  ('sen-link', 'SLink', Icons.hub_outlined),
   ('runtime', 'Runtime', Icons.developer_board_outlined),
   ('local-models', 'Local models', Icons.storage_outlined),
   ('updates', 'Updates', Icons.system_update_alt),

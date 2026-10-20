@@ -12,9 +12,13 @@ import 'settings_screen.dart' show SettingsBody;
 /// `TASK_STATE_WORKING` → `working`.
 String taskStateLabel(String s) => s.replaceFirst('TASK_STATE_', '').toLowerCase().replaceAll('_', ' ');
 
-/// Settings → sen-link: peer this SenClaw with another one over A2A (daemon
-/// `src/sen_link/`, REST `/api/sen-link/*`), delegate tasks to it, and decide
-/// how much a peer's own tasks may do here.
+/// `ip:port`, with an IPv6 address in brackets.
+String slHostPort(String ip, int port) => ip.contains(':') ? '[$ip]:$port' : '$ip:$port';
+
+/// Settings → SLink (code name sen-link): peer this SenClaw with another one
+/// on the same network over A2A (daemon `src/sen_link/`, REST
+/// `/api/sen-link/*`), delegate tasks to it, and decide how much a peer's own
+/// tasks may do here.
 class SenLinkSection extends ConsumerStatefulWidget {
   const SenLinkSection({super.key});
 
@@ -24,29 +28,33 @@ class SenLinkSection extends ConsumerStatefulWidget {
 
 class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
   Map<String, dynamic>? _settings;
+  Map<String, dynamic> _status = const {};
   List<Map<String, dynamic>> _peers = const [];
   String? _loadError;
   bool _saving = false;
   bool _enabled = false;
-  ({String code, int expiresAt, String? connect})? _invite;
+  bool _discoverable = true;
+  bool _migratedShown = true;
+  ({String code, int expiresAt, int port, List<String> addresses, bool listening, String? listenError})? _invite;
+  Map<String, dynamic>? _probe;
+  bool _probing = false;
   String? _openPeer;
   List<Map<String, dynamic>>? _peerTasks;
   String? _peerTasksError;
 
   final _name = TextEditingController();
-  final _url = TextEditingController();
   final _desc = TextEditingController();
   final _board = TextEditingController();
   final _workspace = TextEditingController();
   final _assignee = TextEditingController();
-  final _hub = TextEditingController();
-  final _pairUrl = TextEditingController();
+  final _listenHost = TextEditingController();
+  final _listenPort = TextEditingController();
+  final _pairAddr = TextEditingController();
   final _pairCode = TextEditingController();
-  final _connect = TextEditingController();
 
   @override
   void dispose() {
-    for (final c in [_name, _url, _desc, _board, _workspace, _assignee, _hub, _pairUrl, _pairCode, _connect]) {
+    for (final c in [_name, _desc, _board, _workspace, _assignee, _listenHost, _listenPort, _pairAddr, _pairCode]) {
       c.dispose();
     }
     super.dispose();
@@ -69,6 +77,7 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
       final peers = (await api.get('/api/sen-link/peers') as Map);
       if (!mounted) return;
       setState(() {
+        _status = st;
         _apply((st['settings'] as Map).cast<String, dynamic>());
         _peers = _maps(peers['peers']);
         _loadError = null;
@@ -81,35 +90,45 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
   void _apply(Map<String, dynamic> s) {
     _settings = s;
     _enabled = s['enabled'] == true;
+    _discoverable = s['discoverable'] != false;
     _name.text = '${s['name'] ?? ''}';
-    _url.text = '${s['publicUrl'] ?? ''}';
     _desc.text = '${s['description'] ?? ''}';
-    _board.text = '${s['boardTitle'] ?? 'sen-link'}';
+    _board.text = '${s['boardTitle'] ?? 'SLink'}';
     _workspace.text = '${s['workspaceDir'] ?? ''}';
     _assignee.text = '${s['defaultAssignee'] ?? ''}';
-    _hub.text = '${s['hubUrl'] ?? ''}';
+    _listenHost.text = '${s['listenHost'] ?? '0.0.0.0'}';
+    _listenPort.text = '${s['listenPort'] ?? 18791}';
   }
 
   Future<void> _save() async {
     final base = _settings;
     if (base == null) return;
     final saved = context.tr('Saved');
+    final port = int.tryParse(_listenPort.text.trim());
+    if (port == null || port < 1 || port > 65535) {
+      _snack(context.tr('Listen port must be 1-65535.'));
+      return;
+    }
     setState(() => _saving = true);
     try {
       final s = (await ref.read(apiClientProvider).put('/api/sen-link/settings', body: {
         ...base,
         'enabled': _enabled,
         'name': _name.text.trim(),
-        'publicUrl': orNull(_url.text),
         'description': _desc.text.trim(),
+        'listenHost': _listenHost.text.trim(),
+        'listenPort': port,
+        'discoverable': _discoverable,
         'boardTitle': _board.text.trim(),
         'workspaceDir': orNull(_workspace.text),
         'defaultAssignee': orNull(_assignee.text),
-        'hubUrl': orNull(_hub.text),
       }) as Map)
           .cast<String, dynamic>();
       if (mounted) setState(() => _apply(s));
       _snack(saved);
+      // The daemon opens, moves or closes its LAN socket a moment after the save.
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      if (mounted) await _load();
     } catch (e) {
       _snack(_err(e));
     } finally {
@@ -120,12 +139,14 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
   Future<void> _createInvite() async {
     try {
       final r = (await ref.read(apiClientProvider).post('/api/sen-link/invites') as Map);
-      if (r['warning'] != null) _snack('${r['warning']}');
       if (mounted) {
         setState(() => _invite = (
               code: '${r['code']}',
               expiresAt: (r['expiresAt'] as num).toInt(),
-              connect: r['connect'] as String?,
+              port: (r['port'] as num?)?.toInt() ?? 18791,
+              addresses: [for (final a in (r['addresses'] as List?) ?? const []) '$a'],
+              listening: r['listening'] != false,
+              listenError: r['listenError'] as String?,
             ));
       }
     } catch (e) {
@@ -133,21 +154,75 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
     }
   }
 
-  /// Pair directly (URL + code) or, with [viaHub], by a `senlink:` string.
-  Future<void> _pair({bool viaHub = false}) async {
-    final pairedWith = context.tr('Paired with');
-    final body = viaHub
-        ? {'connect': _connect.text.trim()}
-        : {'url': _pairUrl.text.trim(), 'code': _pairCode.text.trim()};
+  /// Where the typed IP or name lands, and whether a SLink answers there.
+  Future<void> _check() async {
+    setState(() => _probing = true);
     try {
-      final p = (await ref.read(apiClientProvider).post('/api/sen-link/peers/pair', body: body) as Map);
+      final r = (await ref.read(apiClientProvider).post('/api/sen-link/probe', body: {'addr': _pairAddr.text.trim()}) as Map)
+          .cast<String, dynamic>();
+      if (mounted) setState(() => _probe = r);
+    } catch (e) {
+      _snack(_err(e));
+    } finally {
+      if (mounted) setState(() => _probing = false);
+    }
+  }
+
+  /// Pair with the daemon at the typed IP or DNS name, using its invite code.
+  Future<void> _pair() async {
+    final pairedWith = context.tr('Paired with');
+    try {
+      final p = (await ref
+          .read(apiClientProvider)
+          .post('/api/sen-link/peers/pair', body: {'addr': _pairAddr.text.trim(), 'code': _pairCode.text.trim()}) as Map);
       _pairCode.clear();
-      _connect.clear();
+      if (mounted) setState(() => _probe = null);
       _snack('$pairedWith ${p['name']}');
       await _load();
     } catch (e) {
       _snack(_err(e));
     }
+  }
+
+  /// What a probe found, in a sentence a person can act on.
+  Widget _probeResult() {
+    final r = _probe!;
+    final card = r['card'] as Map?;
+    final addr = '${r['addr']}';
+    if (r['ok'] == true && card != null) {
+      final pairable = card['pairable'] == true;
+      final resolved = ((r['resolved'] as List?) ?? const []).join(', ');
+      return coworkNotice(
+        context,
+        [
+          context.trArgs('Found {name} at {addr}', {'name': card['name'], 'addr': addr}),
+          if (resolved.isNotEmpty) resolved,
+          if (!pairable) context.tr('It has no invite right now. Create one on that SenClaw and type its code here.'),
+        ].join('\n'),
+        color: pairable ? AppTokens.success : null,
+      );
+    }
+    if (r['ok'] == true && r['hidden'] == true) {
+      return coworkNotice(
+        context,
+        context.trArgs('A SLink answers at {addr}, but it hides its name. You can still pair with a code.', {'addr': addr}),
+        color: AppTokens.success,
+      );
+    }
+    return coworkNotice(context, '${r['error'] ?? context.tr('Nothing answered.')}', color: AppTokens.warning);
+  }
+
+  /// A value in monospace with a copy button.
+  Widget _copyable(String text, {double size = 13}) {
+    final c = context.colors;
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      SelectableText(text, style: TextStyle(fontFamily: AppTokens.fontMono, fontSize: size, color: c.textPrimary)),
+      IconButton(
+        visualDensity: VisualDensity.compact,
+        icon: const Icon(Icons.copy, size: 14),
+        onPressed: () => Clipboard.setData(ClipboardData(text: text)),
+      ),
+    ]);
   }
 
   Future<void> _patch(String id, Map<String, dynamic> body) async {
@@ -253,20 +328,40 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final migrated = [for (final n in (_status['migrated'] as List?) ?? const []) '$n'];
+    final listening = _status['listening'] as String?;
+    final addresses = [for (final a in (_status['addresses'] as List?) ?? const []) '$a'];
+    final port = int.tryParse(_listenPort.text.trim()) ?? 18791;
     return SettingsBody(
-      title: 'sen-link',
+      title: 'SLink',
       onRefresh: _load,
       children: [
         if (_loadError != null) coworkNotice(context, _loadError!, color: AppTokens.danger),
         if (_settings == null && _loadError == null)
           const Center(child: CircularProgressIndicator())
         else if (_settings != null) ...[
+          if (migrated.isNotEmpty && _migratedShown)
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                child: coworkNotice(
+                  context,
+                  context.trArgs('Peers that only a hub reached were removed: {names}. Pair them again over the LAN.', {'names': migrated.join(', ')}),
+                  color: AppTokens.warning,
+                ),
+              ),
+              IconButton(
+                key: const Key('sl-migrated-close'),
+                tooltip: context.tr('Close'),
+                icon: const Icon(Icons.close, size: 16),
+                onPressed: () => setState(() => _migratedShown = false),
+              ),
+            ]),
           coworkCard(
             context,
-            title: 'sen-link',
+            title: 'SLink',
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(
-                context.tr('Connect this SenClaw to another one (A2A protocol) to hand tasks back and forth. Tasks a peer sends land on a kanban board.'),
+                context.tr('Connect this SenClaw to another one on the same network (A2A protocol) to hand tasks back and forth. Tasks a peer sends land on a kanban board.'),
                 style: TextStyle(color: c.textMuted, fontSize: 12),
               ),
               SwitchListTile(
@@ -276,15 +371,52 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
                 value: _enabled,
                 onChanged: (v) => setState(() => _enabled = v),
               ),
+              if (_settings?['enabled'] == true)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppTokens.s8),
+                  child: Text(
+                    key: const Key('sl-listening'),
+                    listening != null
+                        ? context.trArgs('Listening on {addr}', {'addr': listening})
+                        : '${_status['listenError'] ?? context.tr('Not listening')}',
+                    style: TextStyle(color: listening != null ? AppTokens.success : AppTokens.danger, fontSize: 12),
+                  ),
+                ),
               coworkField(context, label: context.tr('Name shown to peers'), child: TextField(controller: _name, decoration: const InputDecoration(isDense: true))),
-              coworkField(context,
-                  label: context.tr('Public URL'),
-                  help: context.tr('How peers reach this daemon, e.g. a Tailscale address. The daemon must be bound beyond loopback (Settings → General → Network access).'),
-                  child: TextField(controller: _url, decoration: const InputDecoration(hintText: 'http://100.64.0.2:18788', isDense: true))),
-              coworkField(context,
-                  label: context.tr('Hub URL'),
-                  help: context.tr('A SenClaw hub for peers that cannot reach each other directly (NAT). Each invite then gets its own encrypted hub channel.'),
-                  child: TextField(key: const Key('sl-hub'), controller: _hub, decoration: const InputDecoration(hintText: 'https://hub.example.com', isDense: true))),
+              Wrap(spacing: AppTokens.s16, children: [
+                SizedBox(
+                    width: 220,
+                    child: coworkField(context,
+                        label: context.tr('Listen address'),
+                        help: context.tr('Which network interface SLink listens on; 0.0.0.0 is all of them. Only connections from a private network are accepted either way.'),
+                        child: TextField(key: const Key('sl-listen-host'), controller: _listenHost, decoration: const InputDecoration(hintText: '0.0.0.0', isDense: true)))),
+                SizedBox(
+                    width: 140,
+                    child: coworkField(context,
+                        label: context.tr('Listen port'),
+                        child: TextField(
+                            key: const Key('sl-listen-port'),
+                            controller: _listenPort,
+                            keyboardType: TextInputType.number,
+                            onChanged: (_) => setState(() {}),
+                            decoration: const InputDecoration(isDense: true)))),
+              ]),
+              SwitchListTile(
+                key: const Key('sl-discoverable'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(context.tr('Visible to others'), style: const TextStyle(fontSize: 13)),
+                subtitle: Text(
+                  context.tr('Off: another SenClaw cannot find this one by checking or scanning its address. Pairing with a typed address and a code still works.'),
+                  style: TextStyle(color: c.textMuted, fontSize: 12),
+                ),
+                value: _discoverable,
+                onChanged: (v) => setState(() => _discoverable = v),
+              ),
+              if (addresses.isNotEmpty)
+                coworkField(context,
+                    label: context.tr('Addresses of this machine'),
+                    help: context.tr('Type one of these on the other SenClaw to pair with this one.'),
+                    child: Wrap(spacing: AppTokens.s12, children: [for (final a in addresses) _copyable(slHostPort(a, port))])),
               coworkField(context, label: context.tr('Description'), child: TextField(controller: _desc, decoration: const InputDecoration(isDense: true))),
               Wrap(spacing: AppTokens.s16, children: [
                 SizedBox(width: 200, child: coworkField(context, label: context.tr('Board for incoming tasks'), child: TextField(controller: _board, decoration: const InputDecoration(isDense: true)))),
@@ -303,68 +435,65 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
             context,
             title: context.tr('Pair with another SenClaw'),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (_settings?['enabled'] != true) coworkNotice(context, context.tr('Enable sen-link and save first.')),
-              Row(children: [
+              if (_settings?['enabled'] != true) coworkNotice(context, context.tr('Enable SLink and save first.')),
+              Wrap(spacing: AppTokens.s12, runSpacing: AppTokens.s8, crossAxisAlignment: WrapCrossAlignment.center, children: [
                 OutlinedButton(
                   key: const Key('sl-invite'),
                   onPressed: _settings?['enabled'] == true ? _createInvite : null,
                   child: Text(context.tr('Create invite code')),
                 ),
-                if (_invite?.connect != null) ...[
-                  const SizedBox(width: AppTokens.s12),
-                  Expanded(
-                    child: SelectableText(_invite!.connect!,
-                        maxLines: 2, style: TextStyle(fontFamily: AppTokens.fontMono, fontSize: 12, color: c.textPrimary)),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.copy, size: 16),
-                    onPressed: () => Clipboard.setData(ClipboardData(text: _invite!.connect!)),
-                  ),
-                ] else if (_invite != null) ...[
-                  const SizedBox(width: AppTokens.s12),
-                  SelectableText(_invite!.code,
-                      style: TextStyle(fontFamily: AppTokens.fontMono, fontSize: 18, color: c.textPrimary)),
-                  IconButton(
-                    icon: const Icon(Icons.copy, size: 16),
-                    onPressed: () => Clipboard.setData(ClipboardData(text: _invite!.code)),
-                  ),
-                  Flexible(
-                    child: Text(
-                      '${context.tr('valid until')} ${TimeOfDay.fromDateTime(DateTime.fromMillisecondsSinceEpoch(_invite!.expiresAt * 1000)).format(context)} · ${context.tr('use it once on the other SenClaw')}',
-                      style: TextStyle(color: c.textMuted, fontSize: 12),
-                    ),
+                if (_invite != null) ...[
+                  _copyable(_invite!.code, size: 18),
+                  Text(
+                    '${context.tr('valid until')} ${TimeOfDay.fromDateTime(DateTime.fromMillisecondsSinceEpoch(_invite!.expiresAt * 1000)).format(context)} · ${context.tr('use it once on the other SenClaw')}',
+                    style: TextStyle(color: c.textMuted, fontSize: 12),
                   ),
                 ],
               ]),
+              if (_invite != null && !_invite!.listening)
+                coworkNotice(context, _invite!.listenError ?? context.tr('SLink is not listening, so the other SenClaw cannot reach this one.'),
+                    color: AppTokens.warning),
+              if (_invite != null && _invite!.addresses.isNotEmpty) ...[
+                const SizedBox(height: AppTokens.s8),
+                Wrap(spacing: AppTokens.s12, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  Text(context.tr('Type this on the other SenClaw:'), style: TextStyle(color: c.textMuted, fontSize: 12)),
+                  for (final a in _invite!.addresses) _copyable(slHostPort(a, _invite!.port)),
+                ]),
+              ],
               const SizedBox(height: AppTokens.s12),
               Wrap(spacing: AppTokens.s8, runSpacing: AppTokens.s8, crossAxisAlignment: WrapCrossAlignment.center, children: [
                 SizedBox(
-                    width: 300,
-                    child: TextField(controller: _pairUrl, decoration: InputDecoration(hintText: context.tr('Other SenClaw URL, e.g. http://100.64.0.3:18788'), isDense: true))),
+                    width: 340,
+                    child: TextField(
+                        key: const Key('sl-pair-addr'),
+                        controller: _pairAddr,
+                        onChanged: (_) => setState(() => _probe = null),
+                        onSubmitted: (v) => v.trim().isEmpty ? null : _check(),
+                        decoration: InputDecoration(
+                            hintText: context.tr('IP or name of the other SenClaw, e.g. 192.168.1.20 or mac-mini.local'), isDense: true))),
+                OutlinedButton(
+                  key: const Key('sl-check'),
+                  onPressed: _probing || _pairAddr.text.trim().isEmpty ? null : _check,
+                  child: Text(context.tr('Check')),
+                ),
                 SizedBox(
                     width: 160,
-                    child: TextField(controller: _pairCode, decoration: InputDecoration(hintText: context.tr('Invite code'), isDense: true))),
+                    child: TextField(
+                        key: const Key('sl-pair-code'),
+                        controller: _pairCode,
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(hintText: context.tr('Invite code'), isDense: true))),
                 FilledButton.icon(
-                  onPressed: _settings?['enabled'] == true ? _pair : null,
+                  key: const Key('sl-pair'),
+                  onPressed: _settings?['enabled'] == true && _pairAddr.text.trim().isNotEmpty && _pairCode.text.trim().isNotEmpty ? _pair : null,
                   icon: const Icon(Icons.link, size: 16),
                   label: Text(context.tr('Pair')),
                 ),
               ]),
-              const SizedBox(height: AppTokens.s8),
-              Wrap(spacing: AppTokens.s8, runSpacing: AppTokens.s8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                SizedBox(
-                    width: 470,
-                    child: TextField(
-                        key: const Key('sl-connect'),
-                        controller: _connect,
-                        decoration: InputDecoration(hintText: context.tr('…or paste a senlink: connection string (hub invite)'), isDense: true))),
-                OutlinedButton.icon(
-                  key: const Key('sl-pair-hub'),
-                  onPressed: _settings?['enabled'] == true ? () => _pair(viaHub: true) : null,
-                  icon: const Icon(Icons.hub_outlined, size: 16),
-                  label: Text(context.tr('Pair via hub')),
-                ),
-              ]),
+              if (_probe != null) ...[
+                const SizedBox(height: AppTokens.s8),
+                _probeResult(),
+              ],
             ]),
           ),
           coworkCard(
@@ -388,7 +517,16 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('${p['name']}', style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w600)),
-            Text(p['viaRelay'] == true ? 'hub' : '${p['url'] ?? '—'}', style: TextStyle(color: c.textMuted, fontSize: 12)),
+            Row(children: [
+              Text('${p['addr'] ?? '—'}', style: TextStyle(color: c.textMuted, fontSize: 12)),
+              if (p['legacy'] == true) ...[
+                const SizedBox(width: AppTokens.s8),
+                Tooltip(
+                  message: context.tr('Paired by an older version. Pair again over the LAN.'),
+                  child: Text(context.tr('re-pair'), key: const Key('sl-legacy'), style: const TextStyle(color: AppTokens.warning, fontSize: 12)),
+                ),
+              ],
+            ]),
           ]),
         ),
         Text(context.tr('Their tasks run'), style: TextStyle(color: c.textMuted, fontSize: 12)),

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/tokens.dart';
 
-// Building blocks for Settings → sen-link, in the same visual language as the
+// Building blocks for Settings → SLink, in the same visual language as the
 // other settings sections.
 
 /// A titled settings card.

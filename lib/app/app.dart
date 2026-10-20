@@ -17,6 +17,7 @@ import '../core/daemon/startup_gate.dart';
 import '../core/i18n/l10n.dart';
 import '../core/i18n/locale_provider.dart';
 import '../core/notifications/system_notifier.dart';
+import '../core/startup/launch_origin.dart';
 import '../core/transport/connection.dart';
 import '../core/update/update_provider.dart';
 import '../features/capture/capture_hotkey.dart';
@@ -47,7 +48,8 @@ class _SenClawAppState extends ConsumerState<SenClawApp>
   /// the tray). Drives the tray click: main shown → re-activate it; main closed
   /// → open the mini chat. Tracked explicitly because windowManager.isVisible()
   /// is unreliable across hide/skipTaskbar transitions. Starts true (main.dart
-  /// shows the window on launch).
+  /// shows the window on launch) — except a launch at login, which stays in
+  /// the tray.
   bool _mainShown = true;
 
   /// Hourly nudge for the background update check (which debounces to daily).
@@ -62,6 +64,7 @@ class _SenClawAppState extends ConsumerState<SenClawApp>
   @override
   void initState() {
     super.initState();
+    _mainShown = !ref.read(startedHiddenProvider);
     ref.read(connectionBootstrapProvider); // fire-and-forget
     if (_isDesktop) {
       trayManager.addListener(this);

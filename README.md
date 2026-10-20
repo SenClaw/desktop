@@ -20,6 +20,12 @@ opens immediately; otherwise the app spawns the bundled daemon, shows a
 main screen. Failures land on a retryable error screen with the daemon log
 tail.
 
+**Launch at login** (Settings → General → Startup, off by default) registers the
+app with the OS: Login Items on macOS 13+ (`SMAppService`), the `Run` registry
+key on Windows, an XDG autostart entry on Linux (`lib/core/startup/`). A launch
+the OS starts at sign-in stays in the tray — no window, no Dock/taskbar entry —
+and the supervised daemon comes up with it; the window opens from the tray icon.
+
 ## Runtimes: the daemon links no inference code
 
 GGUF/MLX chat, OCR, Speech-to-text, Text-to-speech and Decision (Laya) each run

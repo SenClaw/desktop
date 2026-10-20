@@ -6,8 +6,18 @@
 
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
+#include "utils.h"
 
 namespace {
+
+// Started by the "launch at login" registry entry (lib/core/startup): the app
+// lives in the tray and the window stays hidden until the tray opens it.
+bool LaunchedAtLogin() {
+  for (const std::string& argument : GetCommandLineArguments()) {
+    if (argument == "--autostart") return true;
+  }
+  return false;
+}
 
 // desktop_multi_window registers its sub-window class (the tray's mini chat)
 // with the stock IDI_APPLICATION icon. Give those windows the SenClaw icon so
@@ -54,9 +64,11 @@ bool FlutterWindow::OnCreate() {
   DesktopMultiWindowSetWindowCreatedCallback(UseAppIconForSubWindow);
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
-  flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    this->Show();
-  });
+  if (!LaunchedAtLogin()) {
+    flutter_controller_->engine()->SetNextFrameCallback([&]() {
+      this->Show();
+    });
+  }
 
   // Flutter can complete the first frame before the "show window" callback is
   // registered. The following call ensures a frame is pending to ensure the

@@ -11,6 +11,7 @@ import 'package:window_manager/window_manager.dart';
 import 'app/app.dart';
 import 'app/mini_window_app.dart';
 import 'core/prefs.dart';
+import 'core/startup/launch_origin.dart';
 import 'features/chat/mini_chat_screen.dart' show subWindowIdProvider;
 
 Future<void> main(List<String> args) async {
@@ -32,6 +33,10 @@ Future<void> main(List<String> args) async {
 
   final prefs = await SharedPreferences.getInstance();
 
+  // Started by the OS at sign-in ("Launch at login"): live in the tray and
+  // leave the window to the tray icon, exactly like after closing it.
+  var startHidden = false;
+
   // Desktop-only window chrome (no-op on web/mobile).
   if (!kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.macOS ||
@@ -43,6 +48,7 @@ Future<void> main(List<String> args) async {
     // without this, a stale registration from the previous run keeps the combo
     // and the fresh one silently fails to bind.
     await hotKeyManager.unregisterAll();
+    startHidden = await launchedAtLogin(args);
     const opts = WindowOptions(
       size: Size(1280, 820),
       minimumSize: Size(900, 600),
@@ -51,6 +57,12 @@ Future<void> main(List<String> args) async {
       titleBarStyle: TitleBarStyle.hidden,
     );
     windowManager.waitUntilReadyToShow(opts, () async {
+      if (startHidden) {
+        // The native runner keeps the window hidden for this launch; this
+        // drops the Dock / taskbar entry the way onWindowClose does.
+        await windowManager.setSkipTaskbar(true);
+        return;
+      }
       await windowManager.show();
       await windowManager.focus();
     });
@@ -58,7 +70,10 @@ Future<void> main(List<String> args) async {
 
   runApp(
     ProviderScope(
-      overrides: [prefsProvider.overrideWithValue(prefs)],
+      overrides: [
+        prefsProvider.overrideWithValue(prefs),
+        startedHiddenProvider.overrideWithValue(startHidden),
+      ],
       child: const SenClawApp(),
     ),
   );

@@ -1,12 +1,18 @@
 import Cocoa
 import CoreGraphics
 import FlutterMacOS
+import ServiceManagement
 
 @main
 class AppDelegate: FlutterAppDelegate {
   /// Kept so the menu-bar actions below can call INTO Dart. The channel is
   /// otherwise only used the other way (Dart → native "activate").
   private var appChannel: FlutterMethodChannel?
+
+  /// True when this launch is the system starting us because the user signed
+  /// in ("Launch at login"), not the user opening the app. Dart reads it once
+  /// at startup to stay in the tray instead of showing the window.
+  private var launchedAtLogin = false
 
   // Keep running in the menu bar (tray) when all windows close — like Docker /
   // CCleaner. Quitting is done explicitly via the tray "Quit" item.
@@ -22,6 +28,7 @@ class AppDelegate: FlutterAppDelegate {
   // an accessory (closed to the tray), window_manager's show()/focus() alone
   // don't reliably activate it — `NSApp.activate(ignoringOtherApps:)` does.
   override func applicationDidFinishLaunching(_ notification: Notification) {
+    launchedAtLogin = Self.detectLaunchedAtLogin()
     if let controller = mainFlutterWindow?.contentViewController
       as? FlutterViewController
     {
@@ -37,12 +44,72 @@ class AppDelegate: FlutterAppDelegate {
           result(nil)
         } else if call.method == "capture" {
           self?.handleCapture(call: call, result: result)
+        } else if call.method == "launchedAtLogin" {
+          result(self?.launchedAtLogin ?? false)
+        } else if call.method == "loginItemStatus" {
+          result(Self.loginItemStatus())
+        } else if call.method == "setLoginItem" {
+          self?.handleSetLoginItem(call: call, result: result)
         } else {
           result(FlutterMethodNotImplemented)
         }
       }
     }
     super.applicationDidFinishLaunching(notification)
+  }
+
+  // MARK: - Launch at login
+
+  /// A login item is started with an `open application` Apple event that says
+  /// so (`keyAELaunchedAsLogInItem`); that is the only mark it leaves, since a
+  /// login item cannot carry arguments. `--autostart` does the same by hand
+  /// (`open -n SenClaw.app --args --autostart`), and is what Windows/Linux get.
+  private static func detectLaunchedAtLogin() -> Bool {
+    if CommandLine.arguments.contains("--autostart") { return true }
+    guard let event = NSAppleEventManager.shared().currentAppleEvent,
+      event.eventID == AEEventID(kAEOpenApplication),
+      let prop = event.paramDescriptor(forKeyword: AEKeyword(keyAEPropData))
+    else { return false }
+    return prop.enumCodeValue == OSType(keyAELaunchedAsLogInItem)
+  }
+
+  /// `enabled` / `disabled` / `requiresApproval` (registered, but switched off
+  /// in System Settings → Login Items) / `unsupported` (before macOS 13, which
+  /// introduced `SMAppService`).
+  private static func loginItemStatus() -> String {
+    guard #available(macOS 13.0, *) else { return "unsupported" }
+    switch SMAppService.mainApp.status {
+    case .enabled: return "enabled"
+    case .requiresApproval: return "requiresApproval"
+    default: return "disabled"
+    }
+  }
+
+  private func handleSetLoginItem(call: FlutterMethodCall, result: FlutterResult) {
+    guard #available(macOS 13.0, *) else {
+      result(
+        FlutterError(
+          code: "unsupported", message: "Launch at login needs macOS 13 or later.",
+          details: nil))
+      return
+    }
+    let enable = (call.arguments as? [String: Any])?["enabled"] as? Bool ?? false
+    let service = SMAppService.mainApp
+    do {
+      if enable {
+        // register() on an item that is already registered throws, and one in
+        // `requiresApproval` can only be turned back on by the user.
+        if service.status == .notRegistered || service.status == .notFound {
+          try service.register()
+        }
+      } else if service.status == .enabled || service.status == .requiresApproval {
+        try service.unregister()
+      }
+      result(nil)
+    } catch {
+      result(
+        FlutterError(code: "login_item", message: error.localizedDescription, details: nil))
+    }
   }
 
   // MARK: - Screen capture

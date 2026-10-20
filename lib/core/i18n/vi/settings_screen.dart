@@ -7,6 +7,22 @@ const Map<String, String> viSettingsScreen = {
   'Applies everywhere immediately. System follows your OS language (Vietnamese → Tiếng Việt, otherwise English).':
       'Áp dụng ngay trên toàn ứng dụng. Hệ thống bám theo ngôn ngữ hệ điều hành (tiếng Việt → Tiếng Việt, còn lại → English).',
 
+  // General → Startup (launch at login)
+  'Startup': 'Khởi động',
+  'Launch at login': 'Khởi động cùng hệ thống',
+  'Start SenClaw when you sign in to this computer. It opens in the tray '
+          'without showing a window.':
+      'Tự mở SenClaw khi bạn đăng nhập vào máy. App chạy ở khay hệ thống, '
+          'không hiện cửa sổ.',
+  'SenClaw is turned off in System Settings → General → Login Items. Only '
+          'you can turn it back on there.':
+      'SenClaw đang bị tắt trong Cài đặt hệ thống → Chung → Mục đăng nhập. '
+          'Chỉ bạn mới bật lại được ở đó.',
+  'Open System Settings': 'Mở Cài đặt hệ thống',
+  'Could not read this setting: {e}': 'Không đọc được thiết lập này: {e}',
+  'Could not change launch at login: {e}':
+      'Không đổi được chế độ khởi động cùng hệ thống: {e}',
+
   // General → Network access (daemon bind host)
   'Network access': 'Truy cập mạng',
   'Who can reach this daemon. Private keeps it on this machine; '

@@ -14,10 +14,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import '../chat/audio_service.dart' show audioServiceProvider;
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/daemon/daemon_provider.dart';
 import '../../widgets/embedded_web.dart';
 import '../../core/daemon/daemon_supervisor.dart';
 import '../../core/prefs.dart';
+import '../../core/startup/launch_at_login.dart';
+import '../../core/startup/launch_at_login_macos.dart'
+    show loginItemsSettingsUri;
 import '../../core/i18n/l10n.dart';
 import '../../core/i18n/locale_provider.dart';
 import '../../core/transport/api_client.dart' show ApiException;
@@ -293,6 +297,105 @@ class _ToggleRow extends StatelessWidget {
           Switch(value: value, onChanged: onChanged),
         ],
       ),
+    );
+  }
+}
+
+/// Settings → General → Startup: start SenClaw when the user signs in to the
+/// computer. The app opens in the tray without a window (see
+/// `core/startup/launch_origin.dart`) and brings the daemon up with it. Public
+/// so a widget test can render it alone, like [NetworkBindField].
+///
+/// Renders nothing where the platform has no way to do it.
+class LaunchAtLoginField extends ConsumerStatefulWidget {
+  const LaunchAtLoginField({super.key});
+  @override
+  ConsumerState<LaunchAtLoginField> createState() => _LaunchAtLoginFieldState();
+}
+
+class _LaunchAtLoginFieldState extends ConsumerState<LaunchAtLoginField> {
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _set(bool on) async {
+    final svc = ref.read(launchAtLoginProvider);
+    if (svc == null || _busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await svc.setEnabled(on);
+    } catch (e) {
+      _error = e is PlatformException ? (e.message ?? '$e') : '$e';
+    }
+    // Re-read rather than trust the click: macOS may leave it waiting for the
+    // user's approval, Windows may refuse the write.
+    ref.invalidate(launchAtLoginStateProvider);
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final state = ref.watch(launchAtLoginStateProvider);
+    final current = state.valueOrNull;
+    if (current == null && !state.hasError) return const SizedBox.shrink();
+    if (current == LaunchAtLoginState.unsupported) {
+      return const SizedBox.shrink();
+    }
+    final needsApproval = current == LaunchAtLoginState.needsApproval;
+    final error = _error ??
+        (state.hasError
+            ? context.trArgs('Could not read this setting: {e}',
+                {'e': '${state.error}'})
+            : null);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(context.tr('Startup'),
+            style: TextStyle(
+                color: c.textSecondary, fontWeight: FontWeight.w700)),
+        const SizedBox(height: AppTokens.s8),
+        if (current != null)
+          _ToggleRow(
+            label: context.tr('Launch at login'),
+            desc: context.tr('Start SenClaw when you sign in to this '
+                'computer. It opens in the tray without showing a window.'),
+            value: current == LaunchAtLoginState.enabled,
+            onChanged: _set,
+          ),
+        if (needsApproval)
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppTokens.s8),
+            child: _NoticeBox(
+              tone: _NoticeTone.warning,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(context.tr('SenClaw is turned off in System Settings '
+                      '→ General → Login Items. Only you can turn it back '
+                      'on there.')),
+                  const SizedBox(height: AppTokens.s8),
+                  OutlinedButton(
+                    onPressed: () => launchUrl(loginItemsSettingsUri),
+                    child: Text(context.tr('Open System Settings')),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppTokens.s8),
+            child: Text(
+              context.trArgs('Could not change launch at login: {e}',
+                  {'e': error}),
+              style: const TextStyle(color: AppTokens.danger, fontSize: 12),
+            ),
+          ),
+        const SizedBox(height: AppTokens.s16),
+      ],
     );
   }
 }
@@ -1363,6 +1466,7 @@ class _GeneralSection extends ConsumerWidget {
     return SettingsBody(
       title: context.tr('General'),
       children: [
+        const LaunchAtLoginField(),
         Text(context.tr('Network access'),
             style: TextStyle(
                 color: context.colors.textSecondary,

@@ -14,8 +14,19 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+// Started by the "launch at login" autostart entry (lib/core/startup): the app
+// lives in the tray and the window stays hidden until the tray opens it.
+static gboolean launched_at_login(MyApplication* self) {
+  for (char** argument = self->dart_entrypoint_arguments;
+       argument != nullptr && *argument != nullptr; argument++) {
+    if (g_strcmp0(*argument, "--autostart") == 0) return TRUE;
+  }
+  return FALSE;
+}
+
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
+  if (launched_at_login(self)) return;
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 

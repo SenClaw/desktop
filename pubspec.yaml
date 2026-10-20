@@ -86,6 +86,7 @@ dependencies:
   audioplayers: ^6.1.0
   flutter_graph_view: ^2.1.0
   fl_chart: ^1.2.0
+  win32_registry: ^2.1.0
 
 dev_dependencies:
   flutter_test:

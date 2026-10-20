@@ -67,6 +67,33 @@ Stop whatever you started; never kill a process you did not start.
   further — it is already large; add new sections as new files and register
   them in its `_sections` list + `switch`.
 
+## Launch at login
+
+`lib/core/startup/` is the only place that registers the app with the OS
+(`LaunchAtLogin`: macOS `SMAppService.mainApp` through the `senclaw/app`
+channel in `AppDelegate.swift`, Windows `HKCU\...\Run` via `win32_registry`,
+Linux `~/.config/autostart`). Settings → General → Startup
+(`LaunchAtLoginField`) is its only UI.
+
+- **A login start must show no window.** Windows/Linux entries carry
+  `--autostart` (`kAutostartArg`); a macOS login item cannot carry arguments,
+  so `AppDelegate.detectLaunchedAtLogin` reads the launch Apple event (it also
+  honours `--autostart`, which is how to test: `open -n X.app --args
+  --autostart`). `launchedAtLogin()` (`launch_origin.dart`) turns either into
+  `startedHiddenProvider`; `main.dart` then skips `show()` and `app.dart`
+  starts with `_mainShown = false`. The native runners keep the window hidden
+  for that launch (macOS `MainFlutterWindow.order`, Windows
+  `FlutterWindow::OnCreate`, Linux `first_frame_cb`) — change one, change all.
+- **macOS 13 is the floor** (`SMAppService`); older systems report
+  `unsupported` and the row is hidden. `requiresApproval` means the user
+  switched the item off in System Settings — only they can switch it back on,
+  so the UI links there instead of retrying.
+- `win32_registry` is `dart:ffi`: it is imported only through
+  `launch_at_login_windows_stub.dart`'s conditional import so the web build
+  still compiles.
+- Never register a test build as a login item on the user's machine; tests use
+  a fake `LaunchAtLogin` (`launchAtLoginProvider.overrideWithValue`).
+
 ## Runtimes: the daemon links no inference code
 
 GGUF/MLX chat, OCR, Speech-to-text, Text-to-speech, Decision (Laya) and the

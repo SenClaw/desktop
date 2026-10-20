@@ -167,6 +167,12 @@ class _DecisionSectionState extends ConsumerState<DecisionSection> {
               'Laya is an open "System One" model, compatible with Jev: it does not write text, it answers typed questions — choice (pick a label), score (place on a rubric), noul (how likely a statement holds) — with probabilities. It runs inside the daemon on ONNX Runtime (CPU); a loaded model holds about its own size in RAM. For Vietnamese, use the Multilingual model: the English one reads Vietnamese wrong and still sounds sure.'),
           style: TextStyle(color: c.textMuted, fontSize: 12),
         ),
+        const SizedBox(height: AppTokens.s8),
+        Text(
+          context.tr(
+              'jevos (Jev’s open model, English only) is in the list too: pick the version to download. Its engine and weights come from the feder-cr/jev release, are checked against a pinned sha256, and run as a separate jev process.'),
+          style: TextStyle(color: c.textMuted, fontSize: 12),
+        ),
         const SizedBox(height: AppTokens.s16),
         // A failed poll keeps showing the last list: switching to the error
         // branch would unmount the settings card and lose unsaved edits.
@@ -291,6 +297,7 @@ class _ModelRow extends StatelessWidget {
     if (j != null && j.active) {
       final verb = switch (j.status) {
         'verifying' => context.tr('checking sha256'),
+        'extracting' => context.tr('unpacking'),
         'copying' => context.tr('copying'),
         'listing' => context.tr('listing files'),
         _ => context.tr('downloading'),
@@ -322,12 +329,18 @@ class _ModelRow extends StatelessWidget {
             child: DecisionChip(context.tr('on demand'), color: AppTokens.cyan),
           ),
         Text(
-          context.trArgs('loaded in {s} s · {threads} threads · {batch} · {n} asks', {
-            's': decisionNum(context, l.loadMs / 1000),
-            'threads': l.threads,
-            'batch': l.fixedBatch ? context.tr('fixed batch of 1') : context.tr('dynamic batch'),
-            'n': l.asks,
-          }),
+          l.engine == 'jev-openvino'
+              ? context.trArgs('loaded in {s} s · {threads} threads · jev engine (OpenVINO) · {n} asks', {
+                  's': decisionNum(context, l.loadMs / 1000),
+                  'threads': l.threads,
+                  'n': l.asks,
+                })
+              : context.trArgs('loaded in {s} s · {threads} threads · {batch} · {n} asks', {
+                  's': decisionNum(context, l.loadMs / 1000),
+                  'threads': l.threads,
+                  'batch': l.fixedBatch ? context.tr('fixed batch of 1') : context.tr('dynamic batch'),
+                  'n': l.asks,
+                }),
           style: small,
         ),
         if (idleUnloadMinutes > 0)
@@ -371,7 +384,7 @@ class _ModelRow extends StatelessWidget {
         ),
       if (m.installed && m.loaded == null)
         FilledButton.icon(
-          onPressed: busy || m.loading || !compiled ? null : onLoad,
+          onPressed: busy || m.loading || (!compiled && !m.isJev) ? null : onLoad,
           icon: pending == 'load' || m.loading ? _spinner() : const Icon(Icons.play_arrow_rounded, size: 16),
           label: Text(context.tr('Load')),
         ),
@@ -434,6 +447,12 @@ class _ModelRow extends StatelessWidget {
               Text(m.label, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w600)),
               if (m.kind == 'multilingual') DecisionChip(context.tr('Multilingual'), color: AppTokens.cyan),
               if (m.kind == 'english') const DecisionChip('English'),
+              if (m.isJev)
+                Tooltip(
+                  message: context.tr(
+                      'Runs on its own jev engine (OpenVINO), started as a child process of the decision runtime. It answers only when a request names it or it is the default — never by language.'),
+                  child: const DecisionChip('jev · OpenVINO', color: AppTokens.brandAlt),
+                ),
               if (!m.catalog) DecisionChip(context.tr('custom')),
               if (isDefault) DecisionChip(context.tr('default'), color: AppTokens.warning, icon: Icons.star_rounded),
               if (size != null) Text(size, style: TextStyle(color: c.textMuted, fontSize: 12)),

@@ -5,7 +5,7 @@
 import 'dart:convert';
 
 /// Job states during which the row is busy and the list keeps polling.
-const kActiveJobStatuses = {'queued', 'listing', 'downloading', 'verifying', 'copying'};
+const kActiveJobStatuses = {'queued', 'listing', 'downloading', 'verifying', 'extracting', 'copying'};
 
 int _int(Object? v) => v is num ? v.toInt() : 0;
 double _dbl(Object? v) => v is num ? v.toDouble() : 0;
@@ -50,12 +50,16 @@ class LayaLoaded {
     required this.loadMs,
     required this.fixedBatch,
     required this.asks,
+    this.engine = 'laya-onnx',
     this.threads = 0,
     this.idleSecs = 0,
     this.onDemand = false,
   });
 
   final String kind;
+
+  /// `laya-onnx`, or `jev-openvino` for jevos (older runtimes send none: Laya).
+  final String engine;
   final int loadMs;
 
   /// The graph takes one row per run (ti3x-m exports) instead of a batch.
@@ -73,6 +77,7 @@ class LayaLoaded {
 
   factory LayaLoaded.fromJson(Map<String, dynamic> j) => LayaLoaded(
         kind: '${j['kind'] ?? ''}',
+        engine: '${j['engine'] ?? 'laya-onnx'}',
         loadMs: _int(j['load_ms']),
         fixedBatch: j['batch'] == 'fixed-1',
         asks: _int(j['asks']),
@@ -89,6 +94,7 @@ class LayaModel {
     required this.label,
     required this.description,
     required this.kind,
+    this.engine = 'laya',
     required this.catalog,
     required this.sourceType,
     required this.repo,
@@ -110,6 +116,10 @@ class LayaModel {
 
   /// `english` or `multilingual` (null when unknown).
   final String? kind;
+
+  /// `laya` (ONNX Runtime in the runtime) or `jev` (jevos, its own process).
+  /// Older runtimes send none: Laya.
+  final String engine;
   final bool catalog;
 
   /// `catalog`, `huggingface` or `folder`.
@@ -128,6 +138,8 @@ class LayaModel {
   final LayaJob? job;
   final bool loading;
   final LayaLoaded? loaded;
+
+  bool get isJev => engine == 'jev';
 
   /// The page for [repo]@[revision].
   String get sourcePage => sourceUrl ?? 'https://huggingface.co/$repo/tree/${revision ?? 'main'}';
@@ -150,6 +162,7 @@ class LayaModel {
       label: '${j['label'] ?? j['id'] ?? ''}',
       description: '${j['description'] ?? ''}',
       kind: _str(j['kind']),
+      engine: j['engine'] == 'jev' ? 'jev' : 'laya',
       catalog: j['catalog'] == true,
       sourceType: _str(source['type']),
       repo: _str(source['repo']),

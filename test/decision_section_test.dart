@@ -12,7 +12,77 @@ import 'package:senclaw_desktop/features/settings/decision_models.dart';
 import 'package:senclaw_desktop/features/settings/decision_section.dart';
 import 'package:senclaw_desktop/theme/app_theme.dart';
 
-Map<String, dynamic> _models({String backend = 'local'}) => {
+/// What the runtime sends for jevos: installed and loaded in its own `jev`
+/// process, and a second version whose archive is being unpacked.
+List<Map<String, dynamic>> _jevModels() => [
+      {
+        'id': 'jevos-v5',
+        'label': 'jevos v5 (jev, OpenVINO INT8)',
+        'description': 'Bản mới nhất của jevos.',
+        'kind': 'english',
+        'engine': 'jev',
+        'catalog': true,
+        'source': {
+          'type': 'catalog',
+          'repo': 'feder-cr/jev',
+          'revision': 'jevos-v5',
+          'url': 'https://github.com/feder-cr/jev/releases/tag/jevos-v5',
+        },
+        'approx_size_mb': 800,
+        'size_bytes': 803168153,
+        'installed': true,
+        'path': '/models/laya/jevos-v5',
+        'job': null,
+        'loading': false,
+        'loaded': {
+          'engine': 'jev-openvino',
+          'kind': 'english',
+          'load_ms': 4398,
+          'loaded_at': 0,
+          'batch': 'dynamic',
+          'act_output': 'none',
+          'max_len': 8192,
+          'head_max_len': 0,
+          'threads': 8,
+          'asks': 4,
+          'idle_secs': 0,
+          'on_demand': false,
+        },
+      },
+      {
+        'id': 'jevos-v4',
+        'label': 'jevos v4 (jev, OpenVINO INT8)',
+        'description': 'Bản trước của jevos.',
+        'kind': 'english',
+        'engine': 'jev',
+        'catalog': true,
+        'source': {
+          'type': 'catalog',
+          'repo': 'feder-cr/jev',
+          'revision': 'jevos-v4',
+          'url': 'https://github.com/feder-cr/jev/releases/tag/jevos-v4',
+        },
+        'approx_size_mb': 800,
+        'size_bytes': 700000000,
+        'installed': false,
+        'path': '/models/laya/jevos-v4',
+        'job': {
+          'kind': 'download',
+          'status': 'extracting',
+          'total_bytes': 651000000,
+          'done_bytes': 651000000,
+          'current_file': 'jevos-v4-openvino-int8.zip',
+          'files_total': 2,
+          'files_done': 1,
+          'error': null,
+          'started_at': 0,
+        },
+        'loading': false,
+        'loaded': null,
+      },
+    ];
+
+Map<String, dynamic> _models({String backend = 'local', bool jev = false}) => {
       'compiled': true,
       'root': '/models/laya',
       'backend': backend,
@@ -60,6 +130,7 @@ Map<String, dynamic> _models({String backend = 'local'}) => {
           'loading': false,
           'loaded': null,
         },
+        if (jev) ..._jevModels(),
       ],
     };
 
@@ -91,8 +162,9 @@ Map<String, dynamic> _settingsView({bool hasKey = false, String backend = 'local
 
 /// Serves the three decision endpoints and records what was sent.
 class _FakeApi implements ApiClient {
-  _FakeApi({this.hasKey = false});
+  _FakeApi({this.hasKey = false, this.jev = false});
   final bool hasKey;
+  final bool jev;
   final calls = <(String, Object?)>[];
 
   @override
@@ -105,7 +177,7 @@ class _FakeApi implements ApiClient {
   Future<dynamic> get(String path, {Map<String, dynamic>? query, Duration? timeout}) async {
     calls.add(('GET $path', null));
     return switch (path) {
-      '/api/decision/models' => _models(),
+      '/api/decision/models' => _models(jev: jev),
       '/api/decision/settings' => _settingsView(hasKey: hasKey),
       _ => <String, dynamic>{},
     };
@@ -155,13 +227,13 @@ class _FakeApi implements ApiClient {
       (calls.lastWhere((c) => c.$1 == call).$2 as Map).cast<String, dynamic>();
 }
 
-Future<_FakeApi> _pump(WidgetTester tester, {bool hasKey = false, String lang = 'en'}) async {
+Future<_FakeApi> _pump(WidgetTester tester, {bool hasKey = false, String lang = 'en', bool jev = false}) async {
   // Tall enough that the lazy settings list builds every card.
   tester.view.physicalSize = const Size(1400, 6000);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
-  final api = _FakeApi(hasKey: hasKey);
+  final api = _FakeApi(hasKey: hasKey, jev: jev);
   await tester.pumpWidget(ProviderScope(
     overrides: [apiClientProvider.overrideWithValue(api)],
     child: MaterialApp(
@@ -186,7 +258,7 @@ void main() {
     await _pump(tester);
 
     expect(find.text('How it runs'), findsOneWidget);
-    expect(find.text('On this machine — Laya'), findsWidgets);
+    expect(find.text('On this machine — Laya or jevos'), findsWidgets);
     expect(find.text('Online — Jev API'), findsWidgets);
     expect(find.text('default'), findsOneWidget, reason: 'the default model is marked');
     expect(find.text('on demand'), findsOneWidget, reason: 'a request loaded it, not the button');
@@ -195,6 +267,42 @@ void main() {
     expect(find.text('unloads in ~10 min if unused'), findsOneWidget);
     // Nothing edited yet: nothing to save.
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Save').first).onPressed, isNull);
+  });
+
+  testWidgets('a jevos row names its engine, has its own load line and shows the unpacking', (tester) async {
+    await _pump(tester, jev: true);
+
+    expect(find.text('jevos v5 (jev, OpenVINO INT8)'), findsOneWidget);
+    expect(find.text('jev · OpenVINO'), findsNWidgets(2), reason: 'both jevos rows say which engine runs them');
+    expect(find.text('English'), findsWidgets, reason: 'jevos reads only English');
+    // The loaded row does not claim a batch mode jev does not have.
+    expect(find.textContaining('loaded in 4.4 s · 8 threads · jev engine (OpenVINO) · 4 asks'), findsOneWidget);
+    expect(find.textContaining('dynamic batch · 4 asks'), findsNothing);
+    // An archive being unpacked is a running job: the row shows it and offers Cancel.
+    expect(find.textContaining('unpacking jevos-v4-openvino-int8.zip'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Cancel'), findsOneWidget);
+    // The Laya rows still read as before.
+    expect(find.textContaining('2 threads'), findsOneWidget);
+  });
+
+  testWidgets('a jevos row reads in Vietnamese', (tester) async {
+    await _pump(tester, jev: true, lang: 'vi');
+
+    expect(find.textContaining('đang giải nén jevos-v4-openvino-int8.zip'), findsOneWidget);
+    expect(find.textContaining('engine jev (OpenVINO)'), findsOneWidget);
+    expect(find.text('Trên máy — Laya hoặc jevos'), findsWidgets);
+  });
+
+  test('a model without an engine is Laya, and jevos is jev', () {
+    final laya = LayaModel.fromJson({'id': 'english', 'catalog': true});
+    expect(laya.engine, 'laya');
+    expect(laya.isJev, isFalse);
+    final jev = LayaModel.fromJson(_jevModels().first);
+    expect(jev.isJev, isTrue);
+    expect(jev.loaded!.engine, 'jev-openvino');
+    expect(LayaLoaded.fromJson({'kind': 'english'}).engine, 'laya-onnx');
+    expect(kActiveJobStatuses, contains('extracting'));
+    expect(LayaJob.fromJson({'status': 'extracting'}).active, isTrue);
   });
 
   testWidgets('saving sends the whole form with the chosen backend', (tester) async {

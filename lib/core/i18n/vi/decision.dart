@@ -21,7 +21,7 @@ const Map<String, String> viDecision = {
       'Áp dụng cho mọi lượt hỏi không tự chỉ định; ô Thử hỏi bên dưới vẫn chọn riêng được.',
   'On this machine': 'Trên máy',
   'Online backend': 'Online',
-  'On this machine — Laya': 'Trên máy — Laya',
+  'On this machine — Laya or jevos': 'Trên máy — Laya hoặc jevos',
   'Online — Jev API': 'Online — Jev API',
   'in use': 'đang dùng',
   'Saved how decisions run': 'Đã lưu cách chạy',
@@ -32,16 +32,16 @@ const Map<String, String> viDecision = {
           'English cho chữ ASCII.',
   'CPU threads': 'Số luồng CPU',
   'automatic ({n})': 'tự động ({n})',
-  'ONNX Runtime threads per model. Empty = automatic ({n} on this machine). A loaded model keeps the count it was loaded with — unload and load it again to change it.':
-      'Số luồng ONNX Runtime cho mỗi model. Để trống = tự động ({n} trên máy này). Model đang nạp giữ số '
+  'CPU threads per model (ONNX Runtime, or the jev engine). Empty = automatic ({n} on this machine). A loaded model keeps the count it was loaded with — unload and load it again to change it.':
+      'Số luồng CPU cho mỗi model (ONNX Runtime hoặc engine jev). Để trống = tự động ({n} trên máy này). Model đang nạp giữ số '
           'luồng lúc nạp — gỡ rồi nạp lại để đổi.',
   'Load on demand': 'Tự nạp khi cần',
   'On: a request that needs a model not in RAM loads it (that request takes a few seconds longer). Off: press Load first.':
       'Bật: lượt hỏi cần một model chưa nạp sẽ tự nạp nó (lượt đó lâu thêm vài giây). Tắt: phải bấm Nạp '
           'trước.',
   'Unload from RAM when unused for': 'Tự gỡ khỏi RAM khi không dùng trong',
-  'A model no request has used for this long is unloaded to give the memory back (1.2–1.7 GB each). With Load on demand on, the next request loads it again.':
-      'Model không được hỏi trong khoảng này sẽ được gỡ để trả bộ nhớ (mỗi model 1,2–1,7 GB). Bật Tự nạp '
+  'A model no request has used for this long is unloaded to give the memory back (1.2–1.7 GB for a Laya model, about 4 GB for jevos on Apple silicon). With Load on demand on, the next request loads it again.':
+      'Model không được hỏi trong khoảng này sẽ được gỡ để trả bộ nhớ (model Laya 1,2–1,7 GB; jevos khoảng 4 GB trên Apple silicon). Bật Tự nạp '
           'khi cần thì lượt hỏi sau tự nạp lại.',
   '{n} minutes': '{n} phút',
   '{n} hour': '{n} giờ',
@@ -82,6 +82,15 @@ const Map<String, String> viDecision = {
   'Models': 'Model',
   'Stored in {path}': 'Thư mục lưu: {path}',
   'checking sha256': 'đang kiểm sha256',
+  'unpacking': 'đang giải nén',
+  'Runs on its own jev engine (OpenVINO), started as a child process of the decision runtime. It answers only when a request names it or it is the default — never by language.':
+      'Chạy bằng engine jev riêng (OpenVINO), khởi động như tiến trình con của runtime quyết định. Chỉ trả lời '
+          'khi lượt hỏi nêu tên model này hoặc chọn làm mặc định — không bao giờ tự chọn theo ngôn ngữ.',
+  'jevos (Jev’s open model, English only) is in the list too: pick the version to download. Its engine and weights come from the feder-cr/jev release, are checked against a pinned sha256, and run as a separate jev process.':
+      'Danh sách cũng có jevos (model mở của Jev, chỉ tiếng Anh): chọn phiên bản để tải. Engine và trọng số lấy '
+          'từ release feder-cr/jev, được kiểm theo sha256 đã ghim, và chạy thành tiến trình jev riêng.',
+  'loaded in {s} s · {threads} threads · jev engine (OpenVINO) · {n} asks':
+      'nạp trong {s} s · {threads} luồng · engine jev (OpenVINO) · {n} lượt hỏi',
   'copying': 'đang sao chép',
   'listing files': 'đang lấy danh sách file',
   'downloading': 'đang tải',

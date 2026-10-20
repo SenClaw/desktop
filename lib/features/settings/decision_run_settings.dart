@@ -217,7 +217,7 @@ class _DecisionRunSettingsCardState extends ConsumerState<DecisionRunSettingsCar
           ),
         ),
         help: context.trArgs(
-            'ONNX Runtime threads per model. Empty = automatic ({n} on this machine). A loaded model keeps the count it was loaded with — unload and load it again to change it.',
+            'CPU threads per model (ONNX Runtime, or the jev engine). Empty = automatic ({n} on this machine). A loaded model keeps the count it was loaded with — unload and load it again to change it.',
             {'n': view.autoThreads}),
       ),
       _field(
@@ -244,7 +244,7 @@ class _DecisionRunSettingsCardState extends ConsumerState<DecisionRunSettingsCar
           ),
         ),
         help: context.tr(
-            'A model no request has used for this long is unloaded to give the memory back (1.2–1.7 GB each). With Load on demand on, the next request loads it again.'),
+            'A model no request has used for this long is unloaded to give the memory back (1.2–1.7 GB for a Laya model, about 4 GB for jevos on Apple silicon). With Load on demand on, the next request loads it again.'),
       ),
     ]);
   }
@@ -450,7 +450,7 @@ class _DecisionRunSettingsCardState extends ConsumerState<DecisionRunSettingsCar
             style: const ButtonStyle(visualDensity: VisualDensity.compact),
             segments: [
               ButtonSegment(
-                  value: 'local', icon: const Icon(Icons.computer_outlined, size: 16), label: Text(context.tr('On this machine — Laya'))),
+                  value: 'local', icon: const Icon(Icons.computer_outlined, size: 16), label: Text(context.tr('On this machine — Laya or jevos'))),
               ButtonSegment(
                   value: 'online', icon: const Icon(Icons.cloud_outlined, size: 16), label: Text(context.tr('Online — Jev API'))),
             ],

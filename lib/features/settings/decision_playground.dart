@@ -210,7 +210,7 @@ class _DecisionPlaygroundState extends ConsumerState<DecisionPlayground> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    DropdownMenuItem(value: 'local', child: Text(context.tr('On this machine — Laya'))),
+                    DropdownMenuItem(value: 'local', child: Text(context.tr('On this machine — Laya or jevos'))),
                     DropdownMenuItem(value: 'online', child: Text(context.tr('Online — Jev API'))),
                   ],
                   onChanged: (v) => setState(() => _backend = v ?? 'settings'),
@@ -307,7 +307,7 @@ class _DecisionPlaygroundState extends ConsumerState<DecisionPlayground> {
                     style: TextStyle(color: c.textMuted, fontSize: 12)),
                 Text(context.trArgs('{n} input tokens', {'n': _result!.inputTokens}),
                     style: TextStyle(color: c.textMuted, fontSize: 12)),
-                if (!_result!.online)
+                if (_result!.engine == 'laya-onnx')
                   Text(context.trArgs('{n} graph runs', {'n': _result!.runs}),
                       style: TextStyle(color: c.textMuted, fontSize: 12)),
               ],

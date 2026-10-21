@@ -16,6 +16,7 @@ import 'vi/dock_cowork.dart';
 import 'vi/kanban.dart';
 import 'vi/plugins_misc.dart';
 import 'vi/plugins_screen.dart';
+import 'vi/skill_history.dart';
 import 'vi/projects.dart';
 import 'vi/runtime.dart';
 import 'vi/settings_misc.dart';
@@ -52,6 +53,7 @@ class L10n {
     ...viCowork,
     ...viRuntime,
     ...viPluginsScreen,
+    ...viSkillHistory,
     ...viPluginsMisc,
     ...viChatMain,
     ...viChatMisc,

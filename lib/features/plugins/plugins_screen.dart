@@ -20,6 +20,7 @@ import '../settings/settings_screen.dart' show SpaceAppsSection;
 import '../cognitive/cognitive_screen.dart' show CognitiveScreen;
 import '../workflow/workflow_panel.dart' show WorkflowPanel;
 import '../space/space_screen.dart' show SchedulesPanel;
+import 'skill_history_dialog.dart' show showSkillHistory, shadowedName;
 
 // ── Models ──────────────────────────────────────────────────────────────────
 class SkillInfo {
@@ -28,8 +29,12 @@ class SkillInfo {
   final bool enabled;
   final bool builtin;
   final String source;
+  /// Sources this skill replaces: a managed skill with a bundled skill's name
+  /// hides it.
+  final List<String> shadows;
   const SkillInfo(
-      this.name, this.description, this.enabled, this.builtin, this.source);
+      this.name, this.description, this.enabled, this.builtin, this.source,
+      {this.shadows = const []});
 
   factory SkillInfo.fromJson(Map<String, dynamic> j) {
     final dir = '${j['dir'] ?? ''}';
@@ -47,7 +52,10 @@ class SkillInfo {
             source == 'bundled' ||
             source.startsWith('global') ||
             source.startsWith('app:'),
-        source);
+        source,
+        shadows: ((j['shadows'] as List?) ?? const [])
+            .map((e) => '$e')
+            .toList());
   }
 }
 
@@ -1840,6 +1848,29 @@ class _SkillRow extends StatelessWidget {
                                 color: AppTokens.danger, fontSize: 11)),
                       ),
                     ],
+                    if (s.shadows.isNotEmpty) ...[
+                      const SizedBox(width: AppTokens.s8),
+                      Tooltip(
+                        message: context.trArgs(
+                            'Replaces {what} with the same name; that one is hidden while this exists.',
+                            {'what': context.tr(shadowedName(s.shadows.last))}),
+                        child: Container(
+                          key: const ValueKey('skill-shadow-chip'),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: AppTokens.warning.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(AppTokens.rSm),
+                          ),
+                          child: Text(
+                              context.trArgs('overrides {what}', {
+                                'what': context.tr(shadowedName(s.shadows.last))
+                              }),
+                              style: const TextStyle(
+                                  color: AppTokens.warning, fontSize: 11)),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 2),
@@ -1850,6 +1881,18 @@ class _SkillRow extends StatelessWidget {
               ],
             ),
           ),
+          // A Space App's skills change with the app: they have no history here.
+          if (!s.source.startsWith('app:'))
+            IconButton(
+              key: ValueKey('skill-history-${s.name}'),
+              tooltip: context.tr('History'),
+              icon: const Icon(Icons.history, size: 16),
+              onPressed: () => showSkillHistory(context,
+                  name: s.name,
+                  source: s.source,
+                  canRollback: s.source == 'clawhub-managed',
+                  onRestored: () => ref.invalidate(skillsProvider)),
+            ),
           IconButton(
             tooltip: 'README',
             icon: const Icon(Icons.description_outlined, size: 16),

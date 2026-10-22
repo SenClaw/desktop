@@ -9,6 +9,7 @@ import '../../core/transport/api_client.dart' show ApiException;
 import '../../core/transport/connection.dart';
 import '../../theme/tokens.dart';
 import 'cowork_common.dart';
+import 'sen_link_apps.dart';
 import 'sen_link_knowledge.dart';
 import 'settings_screen.dart' show SettingsBody;
 
@@ -726,15 +727,22 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
       Row(children: [
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              Flexible(child: Text('${p['name']}', overflow: TextOverflow.ellipsis, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w600))),
-              if (SlKnowledgePolicy.fromJson(p['knowledge']).open) ...[
-                const SizedBox(width: AppTokens.s8),
+            // A wrap, not a row: with two tags a Vietnamese label no longer fits beside the controls at 900 px.
+            Wrap(spacing: AppTokens.s8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 280),
+                child: Text('${p['name']}', overflow: TextOverflow.ellipsis, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w600)),
+              ),
+              if (SlKnowledgePolicy.fromJson(p['knowledge']).open)
                 Tooltip(
                   message: context.tr('This peer may ask what you know. Open the Knowledge panel to see what.'),
                   child: Text(context.tr('shares knowledge'), key: const Key('sl-shares'), style: const TextStyle(color: AppTokens.brandAlt, fontSize: 12)),
                 ),
-              ],
+              if (p['appSync'] is Map && (p['appSync'] as Map).isNotEmpty)
+                Tooltip(
+                  message: context.tr('Some apps are open to this peer. Open the Apps panel to see which.'),
+                  child: Text(context.tr('syncs apps'), key: const Key('sl-syncs-apps'), style: const TextStyle(color: AppTokens.brandAlt, fontSize: 12)),
+                ),
             ]),
             Row(children: [
               Flexible(child: Text('${p['addr'] ?? '—'}', overflow: TextOverflow.ellipsis, style: TextStyle(color: c.textMuted, fontSize: 12))),
@@ -792,6 +800,7 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
               segments: [
                 ButtonSegment(value: 'tasks', label: Text(context.tr('Tasks')), enabled: canSend),
                 ButtonSegment(value: 'knowledge', label: Text(context.tr('Knowledge'))),
+                ButtonSegment(value: 'apps', label: Text(context.tr('Apps'))),
               ],
               selected: {_peerTab},
               onSelectionChanged: (s) => _pickPeerTab(id, s.first),
@@ -804,6 +813,8 @@ class _SenLinkSectionState extends ConsumerState<SenLinkSection> {
                 canSend: canSend,
                 onPeer: (u) => setState(() => _peers = [for (final x in _peers) x['id'] == id ? u : x]),
               )
+            else if (_peerTab == 'apps')
+              SenLinkAppsPanel(peerId: id, peerName: '${p['name']}', canSend: canSend, onChanged: _load)
             else
               _peerTasksView(),
           ]),

@@ -33,6 +33,7 @@ import '../../theme/theme_mode_provider.dart';
 import '../../theme/tokens.dart';
 import 'pairing_section.dart';
 import 'browser_section.dart';
+import 'code_autonomy_field.dart';
 import 'sen_link_section.dart';
 import 'decision_section.dart';
 import 'local_models_section.dart';
@@ -1564,6 +1565,18 @@ class _GeneralSection extends ConsumerWidget {
               onChanged: (v) => api.post('/api/agent-behavior',
                   {...b, 'contextCompression': v}, agentBehaviorProvider),
             ),
+            // Absent from a daemon that predates code autonomy: no control then.
+            if (b['codeAutonomy'] is String)
+              CodeAutonomyField(
+                level: b['codeAutonomy'] as String,
+                onChanged: (v) async {
+                  await api.post('/api/agent-behavior',
+                      {...b, 'codeAutonomy': v}, agentBehaviorProvider);
+                  // Not done until the reload shows the saved level, so the
+                  // control never flashes the old one in between.
+                  await ref.read(agentBehaviorProvider.future);
+                },
+              ),
           ]),
         ),
         const SizedBox(height: AppTokens.s16),

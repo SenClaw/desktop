@@ -23,6 +23,33 @@ const Map<String, String> viSettingsScreen = {
   'Could not change launch at login: {e}':
       'Không đổi được chế độ khởi động cùng hệ thống: {e}',
 
+  // General → Agent behavior → Approvals in code sessions (codeAutonomy)
+  'Approvals in code sessions': 'Duyệt trong phiên code',
+  'How much the agent may do without asking you first.':
+      'Agent được tự làm đến đâu mà không hỏi bạn trước.',
+  'Full': 'Toàn quyền',
+  'Every command and every file edit asks first.':
+      'Mọi lệnh và mọi lần sửa tệp đều hỏi trước.',
+  'Edits inside the project and build, test, lint and local git '
+          'commands run on their own; anything that leaves the project or cannot '
+          'be undone still asks, and the card says why.':
+      'Sửa tệp trong dự án và các lệnh build, test, lint, git cục bộ chạy '
+          'luôn; việc ra ngoài dự án hoặc không hoàn tác được vẫn hỏi, thẻ ghi '
+          'rõ lý do.',
+  'Nothing asks: every command and edit runs on its own, including '
+          'ones that cannot be undone.':
+      'Không hỏi gì: mọi lệnh và mọi lần sửa đều chạy luôn, kể cả việc không '
+          'hoàn tác được.',
+  'Auto and Full apply only in code sessions and in folders '
+          'that are git repositories — places where a checkpoint can '
+          'undo the change. Other chats keep asking, whatever you '
+          'choose here.':
+      'Tự động và Toàn quyền chỉ có hiệu lực trong phiên code và trong thư '
+          'mục là kho git — nơi điểm khôi phục hoàn tác được thay đổi. Các '
+          'cuộc trò chuyện khác vẫn hỏi như cũ, dù bạn chọn gì ở đây.',
+  'Could not change the approval level: {e}':
+      'Không đổi được mức duyệt: {e}',
+
   // General → Network access (daemon bind host)
   'Network access': 'Truy cập mạng',
   'Who can reach this daemon. Private keeps it on this machine; '

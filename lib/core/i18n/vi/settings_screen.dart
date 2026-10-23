@@ -226,6 +226,14 @@ const Map<String, String> viSettingsScreen = {
   'Pre-trigger skill': 'Skill kích hoạt trước',
   'Evaluate trigger skills before the main turn.':
       'Đánh giá các skill kích hoạt trước lượt chính.',
+  'Context compression': 'Nén ngữ cảnh',
+  'Shrink long tool results (a JSON list, a build log) once, '
+          'where they are created, instead of re-sending all of it '
+          'with every later message. The full result is saved to a '
+          'file the agent can read back. On by default.':
+      'Thu gọn kết quả công cụ dài (danh sách JSON, log build) một lần ngay '
+          'khi tạo ra, thay vì gửi lại toàn bộ trong mỗi tin nhắn sau. Bản '
+          'đầy đủ được lưu vào một tệp để agent đọc lại khi cần. Mặc định bật.',
   'Autonomous tasks': 'Tác vụ tự động',
   'Auto-run Kanban tasks (dispatcher)': 'Tự chạy tác vụ Kanban (dispatcher)',
   'Automatically assign a worker agent to each task in a '

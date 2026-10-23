@@ -1553,6 +1553,17 @@ class _GeneralSection extends ConsumerWidget {
               onChanged: (v) => api.post('/api/agent-behavior',
                   {...b, 'preTriggerSkill': v}, agentBehaviorProvider),
             ),
+            _ToggleRow(
+              label: context.tr('Context compression'),
+              desc: context.tr(
+                  'Shrink long tool results (a JSON list, a build log) once, '
+                  'where they are created, instead of re-sending all of it '
+                  'with every later message. The full result is saved to a '
+                  'file the agent can read back. On by default.'),
+              value: b['contextCompression'] == true,
+              onChanged: (v) => api.post('/api/agent-behavior',
+                  {...b, 'contextCompression': v}, agentBehaviorProvider),
+            ),
           ]),
         ),
         const SizedBox(height: AppTokens.s16),

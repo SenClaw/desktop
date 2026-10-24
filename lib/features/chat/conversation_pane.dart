@@ -21,9 +21,8 @@ import '../dock/todos_provider.dart';
 import 'agent_usage_provider.dart';
 import 'audio_service.dart';
 import 'conversation_provider.dart';
-import 'plan_history_provider.dart';
+import 'plan_history_dialog.dart';
 import '../../models/space_models.dart' show SpaceSchedule;
-import '../../widgets/app_markdown.dart';
 import '../../widgets/schedule_editor.dart';
 import 'groups_provider.dart';
 import 'image_attachment.dart';
@@ -345,14 +344,9 @@ class _ConversationPaneState extends ConsumerState<ConversationPane> {
                 IconButton(
                   tooltip: context.tr('Plan history'),
                   icon: const Icon(Icons.history_edu_outlined, size: 18),
-                  onPressed: () {
-                    ref
-                        .read(planHistoryProvider.notifier)
-                        .requestList(widget.jid);
-                    showDialog(
-                        context: context,
-                        builder: (_) => _PlanHistoryDialog(jid: widget.jid));
-                  },
+                  onPressed: () => showDialog(
+                      context: context,
+                      builder: (_) => PlanHistoryDialog(jid: widget.jid)),
                 ),
               // The right dock/console doesn't exist in the mini window, so the
               // toggle is a no-op there — hide it.
@@ -839,133 +833,6 @@ class _ModelPickerChip extends ConsumerWidget {
                     style: TextStyle(color: c.textSecondary, fontSize: 12)),
               ),
               Icon(Icons.expand_more, size: 16, color: c.textMuted),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Browse past plans for a group (web PlanHistoryPanel). Persistent in SQLite.
-class _PlanHistoryDialog extends ConsumerStatefulWidget {
-  const _PlanHistoryDialog({required this.jid});
-  final String jid;
-  @override
-  ConsumerState<_PlanHistoryDialog> createState() =>
-      _PlanHistoryDialogState();
-}
-
-class _PlanHistoryDialogState extends ConsumerState<_PlanHistoryDialog> {
-  String? _selected;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final st = ref.watch(planHistoryProvider);
-    final content = _selected == null ? null : st.contentById[_selected];
-    return Dialog(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 820, maxHeight: 620),
-        child: Padding(
-          padding: const EdgeInsets.all(AppTokens.s16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Icon(Icons.history_edu_outlined, size: 18, color: c.accent),
-                const SizedBox(width: AppTokens.s8),
-                Text(context.tr('Plan history'),
-                    style: TextStyle(
-                        color: c.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700)),
-                const Spacer(),
-                IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    onPressed: () => Navigator.pop(context)),
-              ]),
-              const SizedBox(height: AppTokens.s8),
-              Expanded(
-                child: st.summaries.isEmpty
-                    ? Center(
-                        child: Text(context.tr('No plans yet'),
-                            style: TextStyle(color: c.textMuted)))
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // List
-                          SizedBox(
-                            width: 280,
-                            child: ListView.builder(
-                              itemCount: st.summaries.length,
-                              itemBuilder: (_, i) {
-                                final p = st.summaries[i];
-                                final sel = p.id == _selected;
-                                return InkWell(
-                                  onTap: () {
-                                    ref
-                                        .read(planHistoryProvider.notifier)
-                                        .requestGet(p.id);
-                                    setState(() => _selected = p.id);
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: AppTokens.s12,
-                                        vertical: AppTokens.s8),
-                                    margin: const EdgeInsets.symmetric(
-                                        vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          sel ? c.accentSoft : Colors.transparent,
-                                      borderRadius:
-                                          BorderRadius.circular(AppTokens.rMd),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(p.title,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                                color: c.textPrimary,
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w600)),
-                                        if (p.status.isNotEmpty)
-                                          Text(p.status,
-                                              style: TextStyle(
-                                                  color: p.status == 'pending'
-                                                      ? AppTokens.warning
-                                                      : c.textMuted,
-                                                  fontSize: 11)),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          Container(width: 1, color: c.border),
-                          // Content
-                          Expanded(
-                            child: _selected == null
-                                ? Center(
-                                    child: Text(context.tr('Select a plan'),
-                                        style:
-                                            TextStyle(color: c.textMuted)))
-                                : content == null
-                                    ? const Center(
-                                        child: CircularProgressIndicator())
-                                    : SingleChildScrollView(
-                                        padding: const EdgeInsets.all(
-                                            AppTokens.s12),
-                                        child: AppMarkdown(content),
-                                      ),
-                          ),
-                        ],
-                      ),
-              ),
             ],
           ),
         ),

@@ -34,6 +34,10 @@ const Map<String, String> viChatMain = {
   // ── Plan history dialog ─────────────────────────────────────────────
   'No plans yet': 'Chưa có kế hoạch nào',
   'Select a plan': 'Chọn một kế hoạch',
+  'Could not load plans': 'Không tải được danh sách kế hoạch',
+  'This plan has no content': 'Kế hoạch này không có nội dung',
+  'Awaiting approval': 'Chờ duyệt',
+  'Approved · fresh start': 'Đã duyệt · bắt đầu mới',
 
   // ── Cowork tasks dialog ──────────────────────────────────────────────
   'In progress': 'Đang làm',

@@ -702,18 +702,210 @@ String stepHeadline(BuildContext context, ChatMessage t) {
 /// display title ("Browser Search") is the better label.
 bool _hasKnownVerb(String raw) => toolVerb(raw) != 'Used a tool';
 
-/// True when the step's line is the model's own sentence rather than one
-/// composed from the tool name. The collapsed header only previews the
-/// former: "10 bước · Used a tool" says nothing that "10 bước" did not.
-bool _hasOwnDescription(ChatMessage t) => t.toolDescription.isNotEmpty;
+/// The clauses a collapsed group counts by name. Every other tool folds into
+/// one "Used n tools" so the line stays short enough to skim.
+const _countedVerbs = {
+  'Read a file': 'Read {n} files',
+  'Edited a file': 'Edited {n} files',
+  'Wrote a file': 'Wrote {n} files',
+  'Ran a command': 'Ran {n} commands',
+};
 
-/// Collapsible card that groups CONSECUTIVE tool calls into a numbered list
-/// of steps (web `ToolGroupCard` parity).
+enum _FileKind { read, edit, write }
+
+_FileKind? _fileKindOf(String raw) {
+  final name = raw.contains('__') ? raw.split('__').last : raw;
+  switch (name) {
+    case 'Read':
+    case 'read_file':
+      return _FileKind.read;
+    case 'Edit':
+    case 'NotebookEdit':
+    case 'edit_file':
+      return _FileKind.edit;
+    case 'Write':
+    case 'write_file':
+      return _FileKind.write;
+  }
+  return null;
+}
+
+/// A Write whose diff only adds lines made a new file; one that also keeps or
+/// drops lines rewrote a file that was there. No diff says nothing either way.
+bool _writeIsUpdate(ChatMessage t) {
+  final diff = t.toolContentMap?['diff'];
+  if (diff is! String || diff.isEmpty) return false;
+  for (final l in diff.split('\n')) {
+    if (l.startsWith('+++') || l.startsWith('---')) continue;
+    if (l.startsWith('-') || l.startsWith(' ')) return true;
+  }
+  return false;
+}
+
+/// The clause of the collapsed line a step is counted under, or null for a tool
+/// the line does not name.
+String? _summaryKind(ChatMessage t) {
+  switch (_fileKindOf(t.toolName)) {
+    case _FileKind.read:
+      return 'Read a file';
+    case _FileKind.edit:
+      return 'Edited a file';
+    // Writing over a file that existed is an edit, as its row says "Updated".
+    case _FileKind.write:
+      return _writeIsUpdate(t) ? 'Edited a file' : 'Wrote a file';
+    case null:
+      return toolVerb(t.toolName) == 'Ran a command' ? 'Ran a command' : null;
+  }
+}
+
+String _lowerFirst(String s) =>
+    s.isEmpty ? s : s[0].toLowerCase() + s.substring(1);
+
+/// What a group of tool calls did, counted by kind — "Ran 4 commands (1
+/// failed), read 2 files". It is the collapsed line of [ToolGroupCard]: the
+/// rows hold what each step was *for*, this line only how much work there was.
+String toolGroupSummary(BuildContext context, List<ChatMessage> tools) {
+  // Insertion-ordered, so the line reads in the order the work happened.
+  final counts = <String?, int>{};
+  final failed = <String?, int>{};
+  for (final t in tools) {
+    final kind = _summaryKind(t);
+    counts[kind] = (counts[kind] ?? 0) + 1;
+    if (!t.toolOk) failed[kind] = (failed[kind] ?? 0) + 1;
+  }
+  // Tools without a name of their own are the least informative; last.
+  final other = counts.remove(null);
+  final parts = <String>[];
+  void add(String? kind, String text) {
+    final f = failed[kind] ?? 0;
+    final full =
+        f == 0 ? text : '$text ${context.trArgs('({n} failed)', {'n': f})}';
+    parts.add(parts.isEmpty ? full : _lowerFirst(full));
+  }
+
+  counts.forEach((kind, n) => add(
+      kind,
+      n == 1
+          ? context.tr(kind!)
+          : context.trArgs(_countedVerbs[kind]!, {'n': n})));
+  if (other != null) {
+    add(
+        null,
+        other == 1
+            ? context.tr('Used a tool')
+            : context.trArgs('Used {n} tools', {'n': other}));
+  }
+  return parts.join(', ');
+}
+
+/// Lines added and removed across a group's successful writes and edits; null
+/// when none of them carried a diff.
+({int plus, int minus})? toolGroupStats(List<ChatMessage> tools) {
+  var plus = 0, minus = 0, any = false;
+  for (final t in tools) {
+    if (!t.toolOk) continue;
+    final s = _diffStatsOf(t);
+    if (s == null) continue;
+    any = true;
+    plus += s.plus;
+    minus += s.minus;
+  }
+  return any ? (plus: plus, minus: minus) : null;
+}
+
+/// +/− line counts of a Write/Edit result, or null when it carries no diff.
+({int plus, int minus})? _diffStatsOf(ChatMessage t) {
+  final w = _DiffView.forTool(t);
+  if (w is! _DiffView || (w.plus == null && w.minus == null)) return null;
+  return (plus: w.plus ?? 0, minus: w.minus ?? 0);
+}
+
+/// The `+N −M` after a file's name or a group's summary. Green and red, never
+/// bold: it is a figure on a muted line, not a heading.
+List<InlineSpan> _statSpans(({int plus, int minus}) s) => [
+      TextSpan(
+          text: '+${s.plus}', style: const TextStyle(color: AppTokens.success)),
+      const TextSpan(text: ' '),
+      TextSpan(
+          text: '−${s.minus}', style: const TextStyle(color: AppTokens.danger)),
+    ];
+
+/// A Read / Write / Edit step taken apart, so its row can name the file the way
+/// the other steps name what they were for: `Read  main.dart (10–40)  · lib`.
+class _FileStep {
+  const _FileStep({
+    required this.verb,
+    required this.name,
+    required this.dir,
+    this.range,
+    this.stats,
+  });
+  final String verb;
+  final String name;
+  final String dir;
+
+  /// "(10–40)" for a partial read; absent for the whole file.
+  final String? range;
+  final ({int plus, int minus})? stats;
+}
+
+_FileStep? _fileStepOf(BuildContext context, ChatMessage t) {
+  final kind = _fileKindOf(t.toolName);
+  if (kind == null) return null;
+  final c = t.toolContentMap;
+  var path =
+      '${c?['path'] ?? c?['filePath'] ?? c?['file_path'] ?? c?['notebook_path'] ?? ''}';
+  // A refused call has no payload, but the daemon still titles it "Edit
+  // main.rs" — enough to name the file.
+  if (path.isEmpty) {
+    final m = RegExp(r'^(?:Read|Write|Edit|NotebookEdit) (.+)$')
+        .firstMatch(t.toolTitle);
+    if (m == null) return null;
+    path = m.group(1)!;
+  }
+  final cut = path.lastIndexOf(RegExp(r'[/\\]'));
+  final name = path.substring(cut + 1);
+  if (name.isEmpty) return null;
+
+  String? range;
+  if (kind == _FileKind.read && c != null) {
+    final start = c['lineStart'], end = c['lineEnd'], total = c['totalLines'];
+    if (start is num && end is num) {
+      final whole = start == 1 && total is num && end >= total;
+      if (!whole) range = '(${start.toInt()}–${end.toInt()})';
+    }
+  }
+  return _FileStep(
+    verb: switch (kind) {
+      _FileKind.read => context.tr('Read'),
+      _FileKind.edit => context.tr('Edited'),
+      _FileKind.write =>
+        context.tr(_writeIsUpdate(t) ? 'Updated' : 'Wrote'),
+    },
+    name: name,
+    dir: cut > 0 ? path.substring(0, cut) : '',
+    range: range,
+    stats: t.toolOk && kind != _FileKind.read ? _diffStatsOf(t) : null,
+  );
+}
+
+/// The tail of a long folder path: the end is what tells two copies of one file
+/// apart.
+String _shortDir(String dir, {int max = 28}) {
+  if (dir.length <= max) return dir;
+  final tail = dir.substring(dir.length - (max - 1));
+  final slash = tail.indexOf('/');
+  return '…${slash >= 0 ? tail.substring(slash) : tail}';
+}
+
+/// Collapsible card that groups CONSECUTIVE tool calls (web `ToolGroupCard`
+/// parity).
 ///
-/// Collapsed it is one line: how many steps ran, plus what the first one was
-/// for. Expanded, each step is a row headed by the model's own description of
-/// it, with the command (or diff, or output) one more tap away — the detail
-/// views are unchanged, only what leads to them is.
+/// Collapsed it is one muted line — what the group did, counted by kind — with
+/// a small caret after it. Expanded, a rounded list holds one row per step,
+/// headed by the model's own description of it, with the command (or diff, or
+/// output) one more tap away — the detail views are unchanged, only what leads
+/// to them is.
 class ToolGroupCard extends StatefulWidget {
   const ToolGroupCard({super.key, required this.tools});
   final List<ChatMessage> tools;
@@ -724,21 +916,20 @@ class ToolGroupCard extends StatefulWidget {
 class _ToolGroupCardState extends State<ToolGroupCard> {
   bool _open = false;
 
-  /// One step needs no count; several do, and the first step's headline is
-  /// still the most informative thing available before anyone expands.
+  /// A lone step of a kind the summary does not name ("Browser Search · query")
+  /// keeps its own headline: "Used a tool" would say less than the row does.
   String _header(BuildContext context) {
-    final first = widget.tools.first;
-    if (widget.tools.length == 1) return stepHeadline(context, first);
-    final count =
-        context.trArgs('{n} steps', {'n': widget.tools.length});
-    if (!_hasOwnDescription(first)) return count;
-    return '$count · ${stepHeadline(context, first)}';
+    final tools = widget.tools;
+    if (tools.length == 1 && _summaryKind(tools.first) == null) {
+      return stepHeadline(context, tools.first);
+    }
+    return toolGroupSummary(context, tools);
   }
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final anyErr = widget.tools.any((t) => !t.toolOk);
+    final stats = toolGroupStats(widget.tools);
     // Left-aligned and capped to the same max width as message bubbles so the
     // tool timeline lines up with the chat instead of spanning full width.
     return Container(
@@ -747,88 +938,109 @@ class _ToolGroupCardState extends State<ToolGroupCard> {
           horizontal: AppTokens.s24, vertical: AppTokens.s4),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 720),
-        child: Container(
-          decoration: BoxDecoration(
-            color: c.surface,
-            border: Border.all(color: c.border),
-            borderRadius: BorderRadius.circular(AppTokens.rMd),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              InkWell(
-                borderRadius: BorderRadius.circular(AppTokens.rMd),
-                onTap: () => setState(() => _open = !_open),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AppTokens.s12, vertical: AppTokens.s8),
-                  child: Row(
-                    children: [
-                      Icon(
-                        anyErr
-                            ? Icons.error_outline
-                            : Icons.check_circle_outline,
-                        size: 14,
-                        color: anyErr ? AppTokens.danger : c.textMuted,
-                      ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              borderRadius: BorderRadius.circular(AppTokens.rSm),
+              onTap: () => setState(() => _open = !_open),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppTokens.s4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // No status icon: a failure is said in words ("1 failed")
+                    // and marked again on the step that failed.
+                    Flexible(
+                      child: Text(_header(context),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: c.textSecondary, fontSize: 13.5)),
+                    ),
+                    if (stats != null) ...[
                       const SizedBox(width: AppTokens.s8),
-                      Expanded(
-                        child: Text(_header(context),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                color: c.textSecondary, fontSize: 12.5)),
+                      Text.rich(
+                        TextSpan(children: _statSpans(stats)),
+                        maxLines: 1,
+                        style: const TextStyle(fontSize: 13.5),
                       ),
-                      const SizedBox(width: AppTokens.s4),
-                      Icon(_open ? Icons.expand_less : Icons.chevron_right,
-                          size: 16, color: c.textMuted),
                     ],
-                  ),
+                    _Caret(open: _open),
+                  ],
                 ),
               ),
-              if (_open)
-                for (var i = 0; i < widget.tools.length; i++)
-                  _StepRow(
-                    tool: widget.tools[i],
-                    index: i + 1,
-                    last: i == widget.tools.length - 1,
-                  ),
-            ],
-          ),
+            ),
+            if (_open)
+              Container(
+                margin: const EdgeInsets.only(top: AppTokens.s4),
+                clipBehavior: Clip.antiAlias,
+                // Filled, not just outlined: the light theme's border is the
+                // page's own colour, so an outline alone would vanish.
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  border: Border.all(color: c.border),
+                  borderRadius: BorderRadius.circular(AppTokens.rXl),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < widget.tools.length; i++)
+                      _StepRow(tool: widget.tools[i], first: i == 0),
+                  ],
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// One step inside an expanded [ToolGroupCard]: a numbered row whose headline
-/// says what the step was for, and whose body (one tap away) is the command,
-/// diff or output it produced.
+/// The small solid triangle after a line of text: down when open, right when
+/// closed. The glyph carries its own side padding, so it sits a few pixels
+/// clear of the words without a spacer.
+class _Caret extends StatelessWidget {
+  const _Caret({required this.open});
+  final bool open;
+
+  @override
+  Widget build(BuildContext context) => Icon(
+        open ? Icons.arrow_drop_down : Icons.arrow_right,
+        size: 18,
+        color: context.colors.textMuted,
+      );
+}
+
+/// One step inside an expanded [ToolGroupCard]: a row whose headline says what
+/// the step was for, and whose body (one tap away) is the command, diff or
+/// output it produced.
 class _StepRow extends StatefulWidget {
-  const _StepRow({required this.tool, required this.index, required this.last});
+  const _StepRow({required this.tool, required this.first});
   final ChatMessage tool;
-  final int index;
-  final bool last;
+
+  /// The first row sits against the list's own border; the rest are divided
+  /// from the row above.
+  final bool first;
   @override
   State<_StepRow> createState() => _StepRowState();
 }
 
 class _StepRowState extends State<_StepRow> {
-  // File-mutation tools reveal their diff immediately (web `shouldAutoExpand`
-  // parity) — the whole point of expanding the group is to read the change.
-  late bool _open = _isFileMutationTool(widget.tool.toolName);
+  // Closed even for an edit: the row already says which file and how many
+  // lines moved, and the diff is one tap away.
+  bool _open = false;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final t = widget.tool;
     final hasDetail = t.toolContent.isNotEmpty;
-    final headline = stepHeadline(context, t);
+    final file = _fileStepOf(context, t);
+    final style = TextStyle(color: c.textSecondary, fontSize: 13.5);
     return Container(
       decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: c.border),
-        ),
+        border: widget.first ? null : Border(top: BorderSide(color: c.border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -837,49 +1049,32 @@ class _StepRowState extends State<_StepRow> {
             onTap: hasDetail ? () => setState(() => _open = !_open) : null,
             child: Padding(
               padding: const EdgeInsets.symmetric(
-                  horizontal: AppTokens.s12, vertical: AppTokens.s8),
+                  horizontal: _kStepPadX, vertical: 11),
               child: Row(
                 children: [
-                  Container(
-                    width: 18,
-                    height: 18,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                          color: t.toolOk ? c.border : AppTokens.danger),
-                    ),
-                    child: Text('${widget.index}',
-                        style: TextStyle(
-                            fontSize: 10,
-                            color: t.toolOk ? c.textMuted : AppTokens.danger)),
-                  ),
-                  const SizedBox(width: AppTokens.s8),
                   // One line, always. Everything else — the command's output,
-                  // the diff, the raw MCP payload — lives behind the chevron.
+                  // the diff, the raw MCP payload — lives behind the caret.
                   // A step that spills a JSON result into the list is the
-                  // display this replaced.
-                  Expanded(
-                    child: Text(headline,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            color: c.textPrimary, fontSize: 12.5)),
+                  // display this replaced. A short line leaves the caret right
+                  // after it; a long one fades out and pushes it to the edge.
+                  Flexible(
+                    child: Text.rich(
+                      file == null
+                          ? TextSpan(text: stepHeadline(context, t))
+                          : _fileLine(c, file),
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.fade,
+                      style: style,
+                    ),
                   ),
                   if (!t.toolOk)
-                    const Padding(
-                      padding: EdgeInsets.only(left: AppTokens.s4),
-                      child: Icon(Icons.error_outline,
-                          size: 13, color: AppTokens.danger),
-                    ),
-                  if (hasDetail)
                     Padding(
-                      padding: const EdgeInsets.only(left: AppTokens.s4),
-                      child: Icon(
-                          _open ? Icons.expand_less : Icons.chevron_right,
-                          size: 15,
-                          color: c.textMuted),
+                      padding: const EdgeInsets.only(left: AppTokens.s8),
+                      child: Text(context.tr('Failed'),
+                          style: style.copyWith(color: AppTokens.danger)),
                     ),
+                  if (hasDetail) _Caret(open: _open),
                 ],
               ),
             ),
@@ -888,7 +1083,7 @@ class _StepRowState extends State<_StepRow> {
             Container(
               width: double.infinity,
               margin: const EdgeInsets.fromLTRB(
-                  38, 0, AppTokens.s12, AppTokens.s8),
+                  _kStepPadX, 0, _kStepPadX, AppTokens.s12),
               padding: const EdgeInsets.all(AppTokens.s8),
               constraints: const BoxConstraints(maxHeight: 320),
               decoration: BoxDecoration(
@@ -916,6 +1111,23 @@ class _StepRowState extends State<_StepRow> {
     );
   }
 }
+
+/// `Read  main.dart (10–40) · …/lib`: the verb quiet, the file's name plain,
+/// the rest quieter still — so the name is what the eye lands on.
+TextSpan _fileLine(AppColors c, _FileStep f) => TextSpan(children: [
+      TextSpan(text: '${f.verb}  '),
+      TextSpan(text: f.name, style: TextStyle(color: c.textPrimary)),
+      if (f.range != null)
+        TextSpan(text: ' ${f.range}', style: TextStyle(color: c.textMuted)),
+      if (f.stats != null) ...[const TextSpan(text: '  '), ..._statSpans(f.stats!)],
+      if (f.dir.isNotEmpty)
+        TextSpan(
+            text: '${f.range != null ? ' · ' : '  '}${_shortDir(f.dir)}',
+            style: TextStyle(color: c.textMuted)),
+    ]);
+
+/// Side padding of a step row; the opened detail lines up with its text.
+const double _kStepPadX = 14;
 
 /// True for the file-mutation tools (native + MCP `*_file` variants) whose
 /// `content` payload should render as a code diff.

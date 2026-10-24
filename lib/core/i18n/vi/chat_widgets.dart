@@ -46,7 +46,18 @@ const Map<String, String> viChatWidgets = {
   'Created a file': 'Tạo tệp',
   'Edited a file': 'Sửa tệp',
   'Ran a command': 'Chạy lệnh',
-  '{n} steps': '{n} bước',
+  // A file step's row: the verb, then the file's name ("Đọc main.dart").
+  'Read': 'Đọc',
+  'Wrote': 'Ghi',
+  'Updated': 'Cập nhật',
+  // Collapsed tool group: what it did, counted by kind ("Đọc 3 tệp, chạy 2 lệnh").
+  'Read {n} files': 'Đọc {n} tệp',
+  'Wrote {n} files': 'Ghi {n} tệp',
+  'Wrote a file': 'Ghi tệp',
+  '({n} failed)': '({n} lỗi)',
+  'Edited {n} files': 'Sửa {n} tệp',
+  'Ran {n} commands': 'Chạy {n} lệnh',
+  'Used {n} tools': 'Dùng {n} công cụ',
   // changes_tab.dart — turn a checkpoint into a documentation page
   'Ghi tài liệu': 'Ghi tài liệu',
   'Đã ghi {path}': 'Đã ghi {path}',

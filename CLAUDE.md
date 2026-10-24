@@ -154,6 +154,13 @@ Rules:
   15s), never pushed; a watch is silent by design (each check costs no
   tokens), so this is the only way a user tells "waiting" from "forgotten" and
   the only Stop button. Do not build a second watch UI.
+- **Background processes (`lib/features/background/bg_processes.dart`)** are what an agent
+  left running — a dev server — as `GET /api/bg-tasks` reports them: `BgProcessStrip` above
+  the composer (this chat's, with Stop / Log / port chips), `BgProcessesPanel` at the top of
+  the Background screen (every chat's), a badge on the Background nav-rail item
+  (`bgRunningCountProvider`). One `bgProcessesProvider` polls every 3 s for all three. They
+  are not the scheduled tasks of `BackgroundScreen`. A test that mounts `AppShell` must
+  override `bgProcessesProvider` (the rail watches it), as `projects_layout_test.dart` does.
 - **`InlineDispatchCard` (`lib/features/chat/widgets/message_widgets.dart`)**
   renders a DAG's goal/status/per-task state inline in chat and carries the
   retry buttons (`POST /api/dispatch/parents/:id/retry`,

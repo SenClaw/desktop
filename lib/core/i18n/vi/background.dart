@@ -214,4 +214,22 @@ const Map<String, String> viBackground = {
   'Memory': 'Bộ nhớ',
   'remembers prior runs': 'nhớ các lần chạy trước',
   'Content': 'Nội dung',
+  // ── Processes an agent left running (bg_processes.dart) ───────────────────
+  'Log': 'Nhật ký',
+  'Manage': 'Quản lý',
+  'Stop all': 'Dừng tất cả',
+  'Show finished': 'Hiện mục đã kết thúc',
+  'Clear finished': 'Xoá mục đã kết thúc',
+  'Processes ({n} running)': 'Tiến trình ({n} đang chạy)',
+  'Remove from the list': 'Xoá khỏi danh sách',
+  'Nothing is running in the background': 'Không có gì đang chạy nền',
+  'Nothing printed yet. If the command sent its output to a file, it is not shown here.':
+      'Chưa có đầu ra. Nếu lệnh ghi đầu ra vào một tệp thì sẽ không hiện ở đây.',
+  'Runs inside the OS sandbox ({name})': 'Chạy trong hộp cát của hệ điều hành ({name})',
+  'Found after the daemon restarted; its output was not kept.':
+      'Tìm thấy sau khi daemon khởi động lại; đầu ra không được giữ lại.',
+  'Open port {port} in a new tab': 'Mở cổng {port} trong tab mới',
+  'Servers and other programs an agent started and left running on this machine.':
+      'Máy chủ và các chương trình khác mà agent đã khởi chạy và để chạy tiếp trên máy này.',
+  '{n} more running in other chats': '{n} tiến trình khác đang chạy ở các chat khác',
 };

@@ -22,6 +22,7 @@ import 'package:senclaw_desktop/core/i18n/l10n.dart';
 import 'package:senclaw_desktop/core/i18n/locale_provider.dart';
 import 'package:senclaw_desktop/core/prefs.dart';
 import 'package:senclaw_desktop/core/transport/connection.dart';
+import 'package:senclaw_desktop/features/background/bg_processes.dart';
 import 'package:senclaw_desktop/features/chat/groups_provider.dart';
 import 'package:senclaw_desktop/features/chat/new_chat_dialog.dart';
 import 'package:senclaw_desktop/features/chat/session_list.dart';
@@ -116,6 +117,9 @@ Future<_Rig> _pump(
     apiClientProvider.overrideWithValue(api),
     wsClientProvider.overrideWithValue(FakeWs()),
     folderPickerProvider.overrideWithValue((_) async => null),
+    // The rail's Background badge polls the daemon every 3 s; a layout test
+    // wants no timer of its own.
+    bgProcessesProvider.overrideWith((ref) => Stream.value(const <BgProcess>[])),
   ]);
   addTearDown(container.dispose);
   addTearDown(() => L10n.global = const L10n('en'));

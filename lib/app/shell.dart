@@ -9,6 +9,7 @@ import '../core/transport/connection.dart';
 import '../core/transport/ws_client.dart';
 import '../core/update/update_announcer.dart';
 import '../core/update/update_provider.dart';
+import '../features/background/bg_processes.dart' show bgRunningCountProvider;
 import '../features/chat/notifications.dart' show NotificationsBell;
 import '../features/settings/settings_screen.dart' show settingsSectionProvider;
 import '../features/space/space_providers.dart';
@@ -128,6 +129,10 @@ class _NavRail extends ConsumerWidget {
                   _RailItem(
                     section: s,
                     active: location.startsWith(s.path),
+                    // Programs an agent left running show on the Background item.
+                    badge: s.path == '/background'
+                        ? ref.watch(bgRunningCountProvider)
+                        : 0,
                     onTap: () => context.go(s.path),
                   ),
               ],
@@ -213,10 +218,12 @@ class _RailItem extends StatelessWidget {
     required this.section,
     required this.active,
     required this.onTap,
+    this.badge = 0,
   });
   final NavSection section;
   final bool active;
   final VoidCallback onTap;
+  final int badge;
 
   @override
   Widget build(BuildContext context) {
@@ -239,10 +246,14 @@ class _RailItem extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppTokens.rMd),
             ),
             alignment: Alignment.center,
-            child: Icon(
-              section.icon,
-              size: 20,
-              color: active ? c.accent : c.textMuted,
+            child: Badge(
+              isLabelVisible: badge > 0,
+              label: Text('$badge'),
+              child: Icon(
+                section.icon,
+                size: 20,
+                color: active ? c.accent : c.textMuted,
+              ),
             ),
           ),
         ),

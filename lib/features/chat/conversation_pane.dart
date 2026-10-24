@@ -33,6 +33,7 @@ import 'voice_chat_overlay.dart';
 import 'widgets/message_widgets.dart';
 import 'widgets/slash_mention_input.dart';
 import 'watch_strip.dart';
+import '../background/bg_processes.dart';
 
 /// Parse a daemon timestamp to epoch ms — ISO 8601, or "YYYY-MM-DD HH:MM:SS"
 /// (space separator, which `DateTime.parse` rejects). Null if unparseable.
@@ -532,6 +533,7 @@ class _ConversationPaneState extends ConsumerState<ConversationPane> {
         // Composer: input on top, action row (mode/model/attach/mic/send)
         // underneath — Claude-style.
         WatchStrip(jid: widget.jid),
+        BgProcessStrip(jid: widget.jid),
         _Composer(
           jid: widget.jid,
           mode: convo.agentMode,

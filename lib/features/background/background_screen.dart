@@ -9,6 +9,7 @@ import 'background_providers.dart';
 import 'background_quick_dialog.dart';
 import 'background_session_dialog.dart';
 import 'background_task_editor.dart';
+import 'bg_processes.dart';
 
 /// Background — autonomous work the daemon runs by itself.
 ///
@@ -96,6 +97,9 @@ class _LeftPane extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(AppTokens.s16),
       children: [
+        // Programs an agent left running — a different thing from the scheduled
+        // tasks below, under the same word.
+        const BgProcessesPanel(),
         const _StatsRow(),
         const SizedBox(height: AppTokens.s12),
         const _AttentionBand(),

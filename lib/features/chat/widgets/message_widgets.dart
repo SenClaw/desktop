@@ -77,6 +77,10 @@ class _TextBubble extends StatelessWidget {
     final align = userSide ? Alignment.centerRight : Alignment.centerLeft;
     final bg = userSide ? c.bubbleUser : c.bubbleAgent;
     final parts = _splitThink(message.text ?? '');
+    // Reasoning is a line of its own, above whatever the message says; every
+    // block of it goes into that one line.
+    final thinks = [for (final p in parts) if (p.isThink) p.text];
+    final body = [for (final p in parts) if (!p.isThink) p];
 
     // Don't render an empty bubble (e.g. a reasoning-only message after the
     // tags were stripped) — that was the stray "pending" box at the top.
@@ -86,7 +90,20 @@ class _TextBubble extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return Container(
+    // A message that is nothing but reasoning is just that line, with its size
+    // after it in place of the bubble's footer.
+    if (thinks.isNotEmpty && body.isEmpty && message.attachments.isEmpty) {
+      return _ThinkLine(
+        text: thinks.join('\n\n'),
+        tokens: message.streaming
+            ? '…'
+            : message.tokens == null
+                ? null
+                : context.trArgs('{n} tok', {'n': message.tokens}),
+      );
+    }
+
+    final bubble = Container(
       alignment: align,
       padding: const EdgeInsets.symmetric(
         horizontal: AppTokens.s24,
@@ -120,23 +137,20 @@ class _TextBubble extends StatelessWidget {
                     ),
                   ),
                 ),
-              for (final part in parts)
-                part.isThink
-                    ? _ReasoningTile(text: part.text)
-                    : Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 1),
-                        child: AppMarkdown(
-                          part.text,
-                          style: TextStyle(
-                              color: c.textPrimary, height: 1.5, fontSize: 14),
-                        ),
-                      ),
+              for (final part in body)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 1),
+                  child: AppMarkdown(
+                    part.text,
+                    style: TextStyle(
+                        color: c.textPrimary, height: 1.5, fontSize: 14),
+                  ),
+                ),
               if (message.attachments.isNotEmpty)
                 _Attachments(attachments: message.attachments),
               // Footer: tokens + actions (left) · timestamp (bottom-right).
-              // Reasoning-only ("think") messages get no footer/time.
               Builder(builder: (_) {
-                final hasContent = parts.any((p) => !p.isThink);
+                final hasContent = body.isNotEmpty;
                 final isAgent = message.kind == MessageKind.agent;
                 final showTokens =
                     message.tokens != null || message.streaming;
@@ -145,10 +159,7 @@ class _TextBubble extends StatelessWidget {
                 final showActions = !message.streaming &&
                     hasContent &&
                     (isAgent || userSide);
-                final contentText = parts
-                    .where((p) => !p.isThink)
-                    .map((p) => p.text)
-                    .join('\n\n');
+                final contentText = body.map((p) => p.text).join('\n\n');
                 final time = hasContent ? _fmtTime(context, message.ts) : '';
                 if (!showTokens && !showActions && time.isEmpty) {
                   return const SizedBox.shrink();
@@ -196,6 +207,10 @@ class _TextBubble extends StatelessWidget {
           ),
         ),
       ),
+    );
+    if (thinks.isEmpty) return bubble;
+    return Column(
+      children: [_ThinkLine(text: thinks.join('\n\n')), bubble],
     );
   }
 }
@@ -395,58 +410,52 @@ List<_Part> _splitThink(String text) {
       .toList();
 }
 
-/// Collapsible reasoning block (collapsed by default), styled dim.
-class _ReasoningTile extends StatefulWidget {
-  const _ReasoningTile({required this.text});
+/// A model's reasoning, on a line of its own: the word "think" and a caret,
+/// closed; opened, the same rounded box a tool group opens into. It is never
+/// part of a message bubble and never counted in a tool group.
+class _ThinkLine extends StatefulWidget {
+  const _ThinkLine({required this.text, this.tokens});
   final String text;
+
+  /// The reasoning's own size, for a message that is nothing but reasoning.
+  final String? tokens;
   @override
-  State<_ReasoningTile> createState() => _ReasoningTileState();
+  State<_ThinkLine> createState() => _ThinkLineState();
 }
 
-class _ReasoningTileState extends State<_ReasoningTile> {
+class _ThinkLineState extends State<_ThinkLine> {
   bool _open = false;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    // Compact inline "think ›" row (web ReasoningCollapsible), collapsed default.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return _QuietFrame(
       children: [
-        InkWell(
-          borderRadius: BorderRadius.circular(AppTokens.rSm),
+        _QuietHeader(
+          label: context.tr('think'),
+          open: _open,
           onTap: () => setState(() => _open = !_open),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppTokens.s4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Filled bulb in the info accent — matches web BulbFilled.
-                Icon(Icons.lightbulb, size: 13, color: c.accent),
-                const SizedBox(width: AppTokens.s8),
-                Text(context.tr('think'),
-                    style: TextStyle(color: c.textSecondary, fontSize: 13)),
-                const SizedBox(width: AppTokens.s6),
-                Text(_open ? '▾' : '›',
-                    style: TextStyle(color: c.textMuted, fontSize: 13)),
-              ],
-            ),
-          ),
+          trailing: [
+            if (widget.tokens != null) ...[
+              const SizedBox(width: AppTokens.s8),
+              Text(widget.tokens!,
+                  style: TextStyle(color: c.textMuted, fontSize: 12.5)),
+            ],
+          ],
         ),
         if (_open)
-          Container(
-            margin: const EdgeInsets.only(left: 18, top: 2, bottom: AppTokens.s4),
-            padding: const EdgeInsets.only(left: AppTokens.s12),
-            decoration: BoxDecoration(
-              border: Border(left: BorderSide(color: c.border, width: 2)),
-            ),
-            child: AppMarkdown(
-              widget.text,
-              style: TextStyle(
-                  color: c.textSecondary,
-                  fontSize: 12,
-                  height: 1.5,
-                  fontStyle: FontStyle.italic),
+          _QuietBox(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: _kStepPadX, vertical: AppTokens.s12),
+              child: AppMarkdown(
+                widget.text,
+                style: TextStyle(
+                    color: c.textSecondary,
+                    fontSize: 13,
+                    height: 1.5,
+                    fontStyle: FontStyle.italic),
+              ),
             ),
           ),
       ],
@@ -930,69 +939,125 @@ class _ToolGroupCardState extends State<ToolGroupCard> {
   Widget build(BuildContext context) {
     final c = context.colors;
     final stats = toolGroupStats(widget.tools);
-    // Left-aligned and capped to the same max width as message bubbles so the
-    // tool timeline lines up with the chat instead of spanning full width.
-    return Container(
-      alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppTokens.s24, vertical: AppTokens.s4),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            InkWell(
-              borderRadius: BorderRadius.circular(AppTokens.rSm),
-              onTap: () => setState(() => _open = !_open),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppTokens.s4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // No status icon: a failure is said in words ("1 failed")
-                    // and marked again on the step that failed.
-                    Flexible(
-                      child: Text(_header(context),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              color: c.textSecondary, fontSize: 13.5)),
-                    ),
-                    if (stats != null) ...[
-                      const SizedBox(width: AppTokens.s8),
-                      Text.rich(
-                        TextSpan(children: _statSpans(stats)),
-                        maxLines: 1,
-                        style: const TextStyle(fontSize: 13.5),
-                      ),
-                    ],
-                    _Caret(open: _open),
-                  ],
-                ),
+    return _QuietFrame(
+      children: [
+        // No status icon: a failure is said in words ("1 failed") and marked
+        // again on the step that failed.
+        _QuietHeader(
+          label: _header(context),
+          open: _open,
+          onTap: () => setState(() => _open = !_open),
+          trailing: [
+            if (stats != null) ...[
+              const SizedBox(width: AppTokens.s8),
+              Text.rich(
+                TextSpan(children: _statSpans(stats)),
+                maxLines: 1,
+                style: TextStyle(color: c.textSecondary, fontSize: 13.5),
               ),
-            ),
-            if (_open)
-              Container(
-                margin: const EdgeInsets.only(top: AppTokens.s4),
-                clipBehavior: Clip.antiAlias,
-                // Filled, not just outlined: the light theme's border is the
-                // page's own colour, so an outline alone would vanish.
-                decoration: BoxDecoration(
-                  color: c.surface,
-                  border: Border.all(color: c.border),
-                  borderRadius: BorderRadius.circular(AppTokens.rXl),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (var i = 0; i < widget.tools.length; i++)
-                      _StepRow(tool: widget.tools[i], first: i == 0),
-                  ],
-                ),
-              ),
+            ],
           ],
         ),
+        if (_open)
+          _QuietBox(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < widget.tools.length; i++)
+                  _StepRow(tool: widget.tools[i], first: i == 0),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Left-aligned and capped to the same max width as message bubbles, so what is
+/// built from the quiet pieces below lines up with the chat instead of
+/// spanning the full width.
+class _QuietFrame extends StatelessWidget {
+  const _QuietFrame({required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppTokens.s24, vertical: AppTokens.s4),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: children,
+          ),
+        ),
+      );
+}
+
+/// The quiet line that opens something: muted words, anything quieter after
+/// them, and a caret. A tool group and a model's reasoning are both this, so
+/// they read as the same kind of thing.
+class _QuietHeader extends StatelessWidget {
+  const _QuietHeader({
+    required this.label,
+    required this.open,
+    required this.onTap,
+    this.trailing = const [],
+  });
+  final String label;
+  final bool open;
+  final VoidCallback onTap;
+
+  /// Figures or counts that sit between the words and the caret.
+  final List<Widget> trailing;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        borderRadius: BorderRadius.circular(AppTokens.rSm),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppTokens.s4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: context.colors.textSecondary, fontSize: 13.5)),
+              ),
+              ...trailing,
+              _Caret(open: open),
+            ],
+          ),
+        ),
+      );
+}
+
+/// The rounded box a [_QuietHeader] opens into.
+class _QuietBox extends StatelessWidget {
+  const _QuietBox({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      // As wide as the frame, whatever it holds: a short reasoning must not
+      // open into a narrower box than a tool group.
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: AppTokens.s4),
+      clipBehavior: Clip.antiAlias,
+      // Filled, not just outlined: the light theme's border is the page's own
+      // colour, so an outline alone would vanish.
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(AppTokens.rXl),
       ),
+      child: child,
     );
   }
 }

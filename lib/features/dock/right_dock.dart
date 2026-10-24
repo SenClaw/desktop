@@ -17,6 +17,7 @@ import '../chat/groups_provider.dart';
 import '../space/space_providers.dart';
 import 'changes_tab.dart';
 import 'dispatch_provider.dart';
+import 'todo_group.dart';
 import 'todos_provider.dart';
 import 'workbench_provider.dart';
 
@@ -195,6 +196,7 @@ class _ConsoleTab extends ConsumerWidget {
     final c = context.colors;
     final d = ref.watch(dispatchProvider);
     final todos = ref.watch(agentTodosProvider);
+    final groups = ref.watch(groupsProvider);
     final markdown = ref.watch(consoleMarkdownProvider);
     // Chronological feed (oldest → newest), capped to the most recent 80.
     final shown = d.activity.length > 80
@@ -211,8 +213,12 @@ class _ConsoleTab extends ConsumerWidget {
       children: [
         // Agent todos (TodoWrite) — web AgentTodoPanel.
         for (final entry in todos.entries) ...[
-          _TodoGroup(
-            jid: entry.key,
+          TodoGroup(
+            title: groups
+                    .where((g) => g.jid == entry.key)
+                    .map((g) => g.name)
+                    .firstOrNull ??
+                entry.key.split(':').last,
             todos: entry.value,
             onRemove: () =>
                 ref.read(agentTodosProvider.notifier).remove(entry.key),
@@ -587,100 +593,6 @@ class _WorkbenchTabState extends ConsumerState<_WorkbenchTab> {
                   ],
                 ),
         ),
-      ],
-    );
-  }
-}
-
-/// One agent's todo list with a progress count (web AgentTodoPanel item).
-class _TodoGroup extends StatelessWidget {
-  const _TodoGroup({required this.jid, required this.todos, this.onRemove});
-  final String jid;
-  final List<AgentTodo> todos;
-  final VoidCallback? onRemove;
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final done = todos.where((t) => t.status == 'completed').length;
-    final running = todos.where((t) => t.status == 'in_progress').length;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.checklist, size: 14, color: c.accent),
-            const SizedBox(width: AppTokens.s6),
-            Expanded(
-              child: Text(jid.split(':').last,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      color: c.textPrimary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700)),
-            ),
-            Text('$done/${todos.length}',
-                style: TextStyle(color: c.textMuted, fontSize: 11)),
-            if (onRemove != null)
-              InkWell(
-                onTap: onRemove,
-                borderRadius: BorderRadius.circular(AppTokens.rFull),
-                child: Padding(
-                  padding: const EdgeInsets.all(2),
-                  child: Icon(Icons.close, size: 14, color: c.textMuted),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: AppTokens.s6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(AppTokens.rSm),
-          child: LinearProgressIndicator(
-            value: todos.isEmpty ? 0 : done / todos.length,
-            minHeight: 3,
-            backgroundColor: c.surfaceAlt,
-            color: running > 0 ? c.accent : AppTokens.success,
-          ),
-        ),
-        const SizedBox(height: AppTokens.s6),
-        for (final t in todos)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                    t.status == 'completed'
-                        ? '✓'
-                        : t.status == 'in_progress'
-                            ? '↻'
-                            : '–',
-                    style: TextStyle(
-                        color: t.status == 'completed'
-                            ? AppTokens.success
-                            : t.status == 'in_progress'
-                                ? c.accent
-                                : c.textMuted,
-                        fontSize: 12)),
-                const SizedBox(width: AppTokens.s6),
-                Expanded(
-                  child: Text(
-                      t.status == 'in_progress' && t.activeForm.isNotEmpty
-                          ? t.activeForm
-                          : t.content,
-                      style: TextStyle(
-                        color: t.status == 'completed'
-                            ? c.textMuted
-                            : c.textSecondary,
-                        fontSize: 12,
-                        decoration: t.status == 'completed'
-                            ? TextDecoration.lineThrough
-                            : null,
-                      )),
-                ),
-              ],
-            ),
-          ),
       ],
     );
   }

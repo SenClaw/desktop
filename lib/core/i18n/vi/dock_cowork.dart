@@ -8,6 +8,8 @@
 const Map<String, String> viDockCowork = {
   // ── Right dock: tab bar ────────────────────────────────────────────────
   'Console': 'Điều khiển',
+  // Todo status labels in the Console (Running / Done already exist in common).
+  'Waiting': 'Đang chờ',
   'Workbench': 'Bàn làm việc',
   'Apps': 'Ứng dụng',
   'Terminal': 'Terminal',

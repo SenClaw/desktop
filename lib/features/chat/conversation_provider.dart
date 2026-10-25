@@ -84,7 +84,10 @@ class ConversationNotifier extends StateNotifier<ConversationState> {
           },
         ));
       case 'chat:widget':
-        _add(ChatMessage(
+        // A `plan` card re-emits with the SAME id on every TodoWrite
+        // (update-in-place daemon-side), so upsert: replace the existing
+        // message with that id instead of stacking a new card.
+        _upsert(ChatMessage(
           id: '${e['id'] ?? 'widget-$jid-${DateTime.now().microsecondsSinceEpoch}'}',
           kind: MessageKind.widget,
           ts: e['ts'] as String?,
@@ -230,6 +233,19 @@ class ConversationNotifier extends StateNotifier<ConversationState> {
 
   void _add(ChatMessage m) =>
       state = state.copyWith(messages: [...state.messages, m]);
+
+  /// Add [m], or REPLACE the message already carrying its id (a `plan` card
+  /// re-emits under one stable id so it updates in place).
+  void _upsert(ChatMessage m) {
+    final idx = state.messages.indexWhere((x) => x.id == m.id);
+    if (idx == -1) {
+      _add(m);
+      return;
+    }
+    final next = [...state.messages];
+    next[idx] = m;
+    state = state.copyWith(messages: next);
+  }
 
   void _resolve(String id, String? key) {
     final list = state.messages.map((m) {

@@ -20,6 +20,9 @@ const Map<String, String> viChatWidgets = {
   'Widget {id} is unavailable — open the app in Apps to view it.':
       'Widget {id} không khả dụng — mở app trong mục Apps để xem.',
   'Click to load widget': 'Bấm để tải widget',
+  // _PlanCard — live task checklist card (widget_card.dart)
+  'Plan': 'Kế hoạch',
+  'Plan has no items': 'Kế hoạch không có mục nào',
   // Fallback heading for an uncaptioned video card. Unchanged in Vietnamese —
   // the key exists so other locales have a hook.
   'Video': 'Video',

@@ -51,6 +51,7 @@ class AppMarkdown extends StatelessWidget {
     'video',
     'audio',
     'image',
+    'plan',
   };
 
   /// Try to parse a fenced block tagged as a widget into a WidgetSpec map.

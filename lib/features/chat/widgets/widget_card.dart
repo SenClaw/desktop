@@ -75,6 +75,11 @@ class WidgetCard extends StatelessWidget {
         icon = Icons.wb_sunny_outlined;
         body = _WeatherBody(data: dataMap);
         break;
+      case 'plan':
+        // Owns its whole card (header + done/total + collapse) — returned
+        // directly, not wrapped in the shared shell, so the title and count
+        // live in one header row.
+        return _PlanCard(data: dataMap, title: title);
       default:
         return _errorChip(
             context, context.trArgs('Unknown widget: "{kind}"', {'kind': kind}));
@@ -1435,6 +1440,203 @@ class _AppWidgetBodyState extends State<_AppWidgetBody> {
             ),
           ),
       ],
+    );
+  }
+}
+
+// ===== Plan (live task checklist) =====
+
+/// One checklist row of a `plan` widget (same shape as a TodoWrite item).
+class _PlanItemData {
+  const _PlanItemData(this.content, this.status, this.activeForm);
+  final String content;
+  final String status; // pending | in_progress | completed
+  final String activeForm;
+
+  bool get completed => status == 'completed';
+  bool get inProgress => status == 'in_progress';
+}
+
+/// A live task checklist card — the card the TodoWrite tool re-emits as the
+/// agent works, so the user watches one card flip statuses in place (the
+/// daemon keys every re-emit to the same widget id). Owns its whole card:
+/// a header row (list icon, title, done/total count, collapse chevron) and
+/// the rows below it. Row states, matching the web PlanWidget:
+/// completed → filled circle + check, dimmed text (no strikethrough);
+/// in-progress → spinning ring, full text (activeForm when present);
+/// pending → hollow ring, muted text.
+class _PlanCard extends StatefulWidget {
+  const _PlanCard({required this.data, required this.title});
+
+  final Map<String, dynamic> data;
+  final String title;
+
+  @override
+  State<_PlanCard> createState() => _PlanCardState();
+}
+
+class _PlanCardState extends State<_PlanCard> {
+  bool _collapsed = false;
+
+  List<_PlanItemData> get _items {
+    final raw = widget.data['items'];
+    if (raw is! List) return const [];
+    final out = <_PlanItemData>[];
+    for (final e in raw) {
+      if (e is! Map) continue;
+      final content = '${e['content'] ?? ''}'.trim();
+      if (content.isEmpty) continue;
+      out.add(_PlanItemData(
+        content,
+        '${e['status'] ?? 'pending'}',
+        '${e['activeForm'] ?? ''}',
+      ));
+    }
+    return out;
+  }
+
+  Widget _circle(BuildContext context, _PlanItemData it) {
+    final c = context.colors;
+    if (it.completed) {
+      return Container(
+        width: 16,
+        height: 16,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppTokens.success.withValues(alpha: 0.15),
+          border: Border.all(color: AppTokens.success.withValues(alpha: 0.4)),
+        ),
+        child: const Icon(Icons.check, size: 11, color: AppTokens.success),
+      );
+    }
+    if (it.inProgress) {
+      return const SizedBox(
+        width: 16,
+        height: 16,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+    return Container(
+      width: 16,
+      height: 16,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: c.borderStrong, width: 1.5),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _items;
+    if (items.isEmpty) {
+      return WidgetCard._errorChip(context, context.tr('Plan has no items'));
+    }
+    final c = context.colors;
+    final done = items.where((it) => it.completed).length;
+
+    return Container(
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTokens.s24,
+        vertical: AppTokens.s6,
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Container(
+          padding: const EdgeInsets.all(AppTokens.s16),
+          decoration: BoxDecoration(
+            color: c.surface,
+            border: Border.all(color: c.border),
+            borderRadius: BorderRadius.circular(AppTokens.rLg),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              InkWell(
+                borderRadius: BorderRadius.circular(AppTokens.rMd),
+                onTap: () => setState(() => _collapsed = !_collapsed),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppTokens.s4),
+                  child: Row(
+                    children: [
+                      Icon(Icons.checklist_rounded, size: 16, color: c.accent),
+                      const SizedBox(width: AppTokens.s8),
+                      Expanded(
+                        child: Text(
+                          widget.title.isNotEmpty
+                              ? widget.title
+                              : context.tr('Plan'),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: c.textPrimary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppTokens.s8),
+                      Text(
+                        '$done/${items.length}',
+                        style: TextStyle(
+                          color: c.textMuted,
+                          fontSize: 12,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      const SizedBox(width: AppTokens.s4),
+                      AnimatedRotation(
+                        turns: _collapsed ? 0 : 0.5,
+                        duration: const Duration(milliseconds: 150),
+                        child: Icon(
+                          Icons.keyboard_arrow_down,
+                          size: 16,
+                          color: c.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (!_collapsed) ...[
+                const SizedBox(height: AppTokens.s12),
+                for (final it in items)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppTokens.s8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: _circle(context, it),
+                        ),
+                        const SizedBox(width: AppTokens.s12),
+                        Expanded(
+                          child: Text(
+                            it.inProgress && it.activeForm.isNotEmpty
+                                ? it.activeForm
+                                : it.content,
+                            style: TextStyle(
+                              color: it.completed
+                                  ? c.textMuted
+                                  : it.inProgress
+                                      ? c.textPrimary
+                                      : c.textSecondary,
+                              fontWeight:
+                                  it.inProgress ? FontWeight.w500 : null,
+                              fontSize: 13,
+                              height: 1.45,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

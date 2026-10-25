@@ -448,7 +448,7 @@ class _SandboxPanelState extends ConsumerState<SandboxPanel> {
   Widget _policyCard(AppColors c) {
     final p = _policy!;
     Widget toggle(String title, String desc, String key,
-        {List<Widget> children = const []}) {
+        {List<Widget> children = const [], bool enabled = true}) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -470,7 +470,7 @@ class _SandboxPanelState extends ConsumerState<SandboxPanel> {
               ),
               Switch(
                 value: p[key] == true,
-                onChanged: (v) => _savePolicy({key: v}),
+                onChanged: enabled ? (v) => _savePolicy({key: v}) : null,
               ),
             ],
           ),
@@ -485,6 +485,9 @@ class _SandboxPanelState extends ConsumerState<SandboxPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Absent on a daemon older than the switch: show nothing rather than a
+          // control that does nothing.
+          if (p.containsKey('enabled')) _masterSwitch(c, p),
           toggle(
             'Exec (agent Bash tool)',
             'Agent shell commands run inside the OS sandbox and can only '
@@ -492,6 +495,7 @@ class _SandboxPanelState extends ConsumerState<SandboxPanel> {
                 'outside the workspace (npm/cargo…) will be blocked from '
                 'writing.',
             'execShell',
+            enabled: p['enabled'] != false,
             children: [
               Padding(
                 padding: const EdgeInsets.only(left: AppTokens.s12, top: 4),
@@ -555,13 +559,14 @@ class _SandboxPanelState extends ConsumerState<SandboxPanel> {
           ),
           toggle(
               'Run Python',
-              'Allow real Python (REPL + sbx tools). Always sandboxed; '
-                  'switching off refuses to run.',
+              'Allow real Python (REPL + sbx tools). Sandboxed unless the '
+                  'sandbox is switched off above; switching this off refuses '
+                  'to run.',
               'runPython'),
           toggle(
               'Run Node.js',
-              'Allow real Node.js. Always sandboxed; switching off refuses '
-                  'to run.',
+              'Allow real Node.js. Sandboxed unless the sandbox is switched '
+                  'off above; switching this off refuses to run.',
               'runNode'),
           toggle(
               'Network for Python/Node',
@@ -571,6 +576,7 @@ class _SandboxPanelState extends ConsumerState<SandboxPanel> {
             'Scheduled scripts (scheduler)',
             'script / script-agent task commands run in a throwaway sandbox.',
             'schedulerScript',
+            enabled: p['enabled'] != false,
             children: [
               Padding(
                 padding: const EdgeInsets.only(left: AppTokens.s12, top: 4),
@@ -591,6 +597,78 @@ class _SandboxPanelState extends ConsumerState<SandboxPanel> {
         ],
       ),
     );
+  }
+
+  /// The sandbox as a whole. On by default; turning it OFF asks first, because
+  /// everything it covers then runs with the user's full permissions.
+  Widget _masterSwitch(AppColors c, Map<String, dynamic> p) {
+    final on = p['enabled'] != false;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(t('Sandbox'),
+                      style: TextStyle(
+                          color: c.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600)),
+                  Text(
+                      t('On by default. Off: Python / Node.js snippets, agent '
+                          'Bash and scheduled scripts run as ordinary '
+                          'processes on this machine, with no confinement. '
+                          'Runs are recorded as isolation "none".'),
+                      style: TextStyle(color: c.textMuted, fontSize: 11.5)),
+                ],
+              ),
+            ),
+            Switch(
+              value: on,
+              onChanged: (v) async {
+                if (v) {
+                  await _savePolicy({'enabled': true});
+                } else if (await _confirmSandboxOff()) {
+                  await _savePolicy({'enabled': false});
+                }
+              },
+            ),
+          ],
+        ),
+        if (!on)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+                t('The sandbox is OFF. Code runs unconfined. Exec and '
+                    'scheduler switches below are ignored until it is back on.'),
+                style: const TextStyle(color: Colors.redAccent, fontSize: 11.5)),
+          ),
+        const SizedBox(height: AppTokens.s12),
+      ],
+    );
+  }
+
+  Future<bool> _confirmSandboxOff() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(t('Turn the sandbox off?')),
+        content: Text(t('Code will run with your full user permissions: it '
+            'can read and change any file you can, and use the network.')),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(t('Cancel'))),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(t('Turn off'))),
+        ],
+      ),
+    );
+    return ok == true;
   }
 
   String _loopbackText(Map<String, dynamic> p) =>

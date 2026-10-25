@@ -15,7 +15,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Answers the five GETs the panel fires on mount with realistic payloads and
 /// records every mutating call.
 class _FakeSandboxApi implements ApiClient {
-  _FakeSandboxApi({this.apps});
+  _FakeSandboxApi({this.apps, this.policy});
+
+  /// Body of `GET /api/sandbox/exec-policy`. Null = a daemon that predates the
+  /// master `enabled` switch.
+  final Map<String, dynamic>? policy;
 
   /// Rows for `/api/space/apps/sandbox-overview`. Null = the default single
   /// confined, running app.
@@ -84,7 +88,7 @@ class _FakeSandboxApi implements ApiClient {
           'docker': {'available': false, 'detail': 'daemon not running'},
         };
       case '/api/sandbox/exec-policy':
-        return {
+        return policy ?? {
           'execShell': false,
           'execNetwork': true,
           'execFsMode': 'open',
@@ -316,6 +320,78 @@ void main() {
     expect(find.text('/tmp/du-lieu'), findsOneWidget);
     expect(find.byTooltip('Remove from allowlist'), findsOneWidget);
     expect(find.text('Choose folder…'), findsOneWidget);
+  });
+
+  group('master sandbox switch', () {
+    Map<String, dynamic> policy({required bool enabled}) => {
+          'enabled': enabled,
+          'execShell': true,
+          'execNetwork': true,
+          'execFsMode': 'open',
+          'runPython': true,
+          'runNode': true,
+          'codeNetwork': false,
+          'schedulerScript': true,
+          'schedulerNetwork': true,
+        };
+
+    testWidgets('is hidden on a daemon that does not have it', (tester) async {
+      await _pump(tester);
+      expect(find.textContaining('On by default. Off:'), findsNothing);
+    });
+
+    testWidgets('turning the sandbox off asks first, then saves the whole policy',
+        (tester) async {
+      final api = await _pump(
+          tester, _FakeSandboxApi(policy: policy(enabled: true)));
+      expect(tester.widget<Switch>(find.byType(Switch).first).value, isTrue);
+
+      // Declined: nothing is sent.
+      await tester.tap(find.byType(Switch).first);
+      await tester.pumpAndSettle();
+      expect(find.text('Turn the sandbox off?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(api.calls.where((c) => c.startsWith('PUT')), isEmpty);
+
+      // Confirmed: one PUT that carries every other field unchanged.
+      await tester.tap(find.byType(Switch).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Turn off'));
+      await tester.pumpAndSettle();
+      final put =
+          api.calls.singleWhere((c) => c.startsWith('PUT /api/sandbox/exec-policy'));
+      expect(put, contains('"enabled":false'));
+      expect(put, contains('"runPython":true'));
+      expect(find.textContaining('The sandbox is OFF'), findsOneWidget);
+    });
+
+    testWidgets('turning it back on needs no confirmation', (tester) async {
+      final api = await _pump(
+          tester, _FakeSandboxApi(policy: policy(enabled: false)));
+      expect(find.textContaining('The sandbox is OFF'), findsOneWidget);
+
+      await tester.tap(find.byType(Switch).first);
+      await tester.pumpAndSettle();
+      expect(find.text('Turn the sandbox off?'), findsNothing);
+      final put =
+          api.calls.singleWhere((c) => c.startsWith('PUT /api/sandbox/exec-policy'));
+      expect(put, contains('"enabled":true'));
+      expect(find.textContaining('The sandbox is OFF'), findsNothing);
+    });
+
+    testWidgets('the exec and scheduler switches are greyed out while it is off',
+        (tester) async {
+      await _pump(tester, _FakeSandboxApi(policy: policy(enabled: false)));
+      final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
+      // execShell and schedulerScript are on, so each shows its Network child:
+      // [master, execShell, execNetwork, runPython, runNode, codeNetwork,
+      //  schedulerScript, schedulerNetwork]
+      expect(switches[1].onChanged, isNull, reason: 'Exec is overridden');
+      expect(switches[3].onChanged, isNotNull,
+          reason: 'Run Python is still a permission');
+      expect(switches[6].onChanged, isNull, reason: 'Scheduler is overridden');
+    });
   });
 
   testWidgets('the panel renders in the app language, with no switch of its own',

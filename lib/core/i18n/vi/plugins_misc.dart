@@ -26,10 +26,18 @@ const Map<String, String> viPluginsMisc = {
   'Local ports': 'Cổng local',
   "Local ports the agent's shell may call (e.g. the dev server it is working on). Empty = none: loopback is where SenClaw's own API and every Space App live, and none of them ask for credentials.":
       'Cổng local mà shell của agent được gọi (ví dụ dev server đang làm). Để trống = không cổng nào: loopback là chỗ API của chính SenClaw và mọi Space App chạy, đều không hỏi mật khẩu.',
-  'Allow real Python (REPL + sbx tools). Always sandboxed; switching off refuses to run.':
-      'Cho phép chạy Python thật (REPL + tool sbx). Luôn trong sandbox; tắt là từ chối chạy.',
-  'Allow real Node.js. Always sandboxed; switching off refuses to run.':
-      'Cho phép chạy Node.js thật. Luôn trong sandbox; tắt là từ chối chạy.',
+  'Allow real Python (REPL + sbx tools). Sandboxed unless the sandbox is switched off above; switching this off refuses to run.':
+      'Cho phép chạy Python thật (REPL + tool sbx). Chạy trong sandbox trừ khi đã tắt sandbox ở trên; tắt công tắc này là từ chối chạy.',
+  'Allow real Node.js. Sandboxed unless the sandbox is switched off above; switching this off refuses to run.':
+      'Cho phép chạy Node.js thật. Chạy trong sandbox trừ khi đã tắt sandbox ở trên; tắt công tắc này là từ chối chạy.',
+  'On by default. Off: Python / Node.js snippets, agent Bash and scheduled scripts run as ordinary processes on this machine, with no confinement. Runs are recorded as isolation "none".':
+      'Mặc định bật. Tắt: snippet Python / Node.js, Bash của agent và script hẹn giờ chạy như tiến trình thường trên máy này, không bị cô lập. Lượt chạy được ghi là isolation "none".',
+  'The sandbox is OFF. Code runs unconfined. Exec and scheduler switches below are ignored until it is back on.':
+      'Sandbox đang TẮT. Code chạy không bị cô lập. Các công tắc Exec và scheduler bên dưới bị bỏ qua cho tới khi bật lại.',
+  'Turn the sandbox off?': 'Tắt sandbox?',
+  'Code will run with your full user permissions: it can read and change any file you can, and use the network.':
+      'Code sẽ chạy với đầy đủ quyền của bạn: đọc/sửa được mọi file bạn có quyền và dùng được mạng.',
+  'Turn off': 'Tắt',
   'Network for Python/Node': 'Mạng cho Python/Node',
   'Off by default — enable when a snippet needs network access.':
       'Mặc định tắt — bật khi snippet cần gọi mạng.',

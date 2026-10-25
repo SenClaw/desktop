@@ -15,6 +15,7 @@ import '../features/settings/settings_screen.dart' show settingsSectionProvider;
 import '../features/space/space_providers.dart';
 import '../features/space/space_screen.dart' show RunningAppsLayer;
 import '../theme/tokens.dart';
+import '../widgets/core_mismatch_banner.dart';
 import 'nav.dart';
 
 /// Height reserved at the top of the window for the macOS traffic-light
@@ -39,19 +40,30 @@ class AppShell extends ConsumerWidget {
         _NavRail(location: location),
         Container(width: 1, color: c.border),
         Expanded(
-          child: Stack(
+          child: Column(
             children: [
-              child,
-              // Running Space apps stay mounted here so they keep running while
-              // the user is on other screens; shown only on /apps when active.
-              Consumer(builder: (context, ref, _) {
-                final active = ref.watch(runningAppsProvider).active;
-                final show = location.startsWith('/apps') && active != null;
-                return Offstage(
-                  offstage: !show,
-                  child: const RunningAppsLayer(),
-                );
-              }),
+              // A daemon the app adopted that is another build than its own
+              // core (see core_version.dart); nothing at all otherwise.
+              const CoreMismatchBanner(),
+              Expanded(
+                child: Stack(
+                  children: [
+                    child,
+                    // Running Space apps stay mounted here so they keep running
+                    // while the user is on other screens; shown only on /apps
+                    // when active.
+                    Consumer(builder: (context, ref, _) {
+                      final active = ref.watch(runningAppsProvider).active;
+                      final show =
+                          location.startsWith('/apps') && active != null;
+                      return Offstage(
+                        offstage: !show,
+                        child: const RunningAppsLayer(),
+                      );
+                    }),
+                  ],
+                ),
+              ),
             ],
           ),
         ),

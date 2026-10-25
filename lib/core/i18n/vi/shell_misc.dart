@@ -28,6 +28,21 @@ const Map<String, String> viShellMisc = {
   'Remind me later': 'Nhắc lại sau',
   'Skip this version': 'Bỏ qua bản này',
 
+  // ── Adopted core of another build (core_mismatch_banner.dart) ──────────
+  'This app is connected to SenClaw core {running}, which it did not start. '
+          'The core in this app is {bundled}.':
+      'Ứng dụng đang kết nối tới SenClaw core {running} do nơi khác khởi động. '
+          'Core đi kèm ứng dụng là {bundled}.',
+  'Use bundled core': 'Dùng core của ứng dụng',
+  'Switch to the core in this app?': 'Chuyển sang core đi kèm ứng dụng?',
+  'SenClaw core {running} on port {port} is stopped and core {bundled} from '
+          'this app starts in its place. Replies in progress are cut off. If you '
+          'started that core yourself, it does not come back on its own.':
+      'SenClaw core {running} trên cổng {port} sẽ bị dừng và core {bundled} của '
+          'ứng dụng khởi động thay thế. Các câu trả lời đang chạy sẽ bị ngắt. Nếu '
+          'bạn tự khởi động core kia, nó sẽ không tự chạy lại.',
+  'Now running the core in this app.': 'Đang chạy core đi kèm ứng dụng.',
+
   'Offline': 'Ngoại tuyến',
   'Daemon: {status} · open Diagnostics': 'Daemon: {status} · mở Chẩn đoán',
 

@@ -63,6 +63,16 @@ void main() {
     expect(find.textContaining("What's new in 0.3.0"), findsOneWidget);
   });
 
+  testWidgets('an update names the core it brings when the manifest does',
+      (tester) async {
+    await pumpSection(tester,
+        currentVersion: '0.2.0',
+        body: _manifest.replaceFirst(
+            '"version": "0.3.0",', '"version": "0.3.0", "coreVersion": "0.2.10",'));
+
+    expect(find.text('It brings SenClaw core 0.2.10.'), findsOneWidget);
+  });
+
   testWidgets('up-to-date offers a plain re-check, not a download', (tester) async {
     await pumpSection(tester, currentVersion: '0.3.0');
 

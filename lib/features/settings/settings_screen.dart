@@ -1815,6 +1815,9 @@ class _ChannelsSection extends ConsumerWidget {
   }
 }
 
+/// Hub a Senclaw Connector channel registers with unless the user types another.
+const _defaultHubUrl = 'https://senclaw-hub.bacnd.com';
+
 /// Add a messaging channel (Telegram / Feishu / WeChat).
 class _ChannelEditor extends ConsumerStatefulWidget {
   const _ChannelEditor({this.existing});
@@ -1830,7 +1833,7 @@ class _ChannelEditorState extends ConsumerState<_ChannelEditor> {
   final _botToken = TextEditingController();
   final _appId = TextEditingController();
   final _appSecret = TextEditingController();
-  final _hubUrl = TextEditingController(text: 'https://hub.senclaw.ai');
+  final _hubUrl = TextEditingController(text: _defaultHubUrl);
   bool _registering = false;
   String _chatType = 'group';
   bool _requiresTrigger = false;
@@ -2155,8 +2158,8 @@ class _ChannelEditorState extends ConsumerState<_ChannelEditor> {
                   context.tr('HUB URL'),
                   TextField(
                     controller: _hubUrl,
-                    decoration: const InputDecoration(
-                        hintText: 'https://hub.senclaw.ai'),
+                    decoration:
+                        const InputDecoration(hintText: _defaultHubUrl),
                   ),
                   hint: context.tr(
                       'Registers with the hub, then shows a QR code for the '
@@ -2274,9 +2277,8 @@ class _ChannelEditorState extends ConsumerState<_ChannelEditor> {
   /// channel locally, then show the pairing QR for the mobile app. Mirrors the
   /// web ChannelSettings flow.
   Future<void> _registerSenclaw() async {
-    final hub = _hubUrl.text.trim().isEmpty
-        ? 'https://hub.senclaw.ai'
-        : _hubUrl.text.trim();
+    final hub =
+        _hubUrl.text.trim().isEmpty ? _defaultHubUrl : _hubUrl.text.trim();
     setState(() => _registering = true);
     try {
       final res = await http.post(Uri.parse('$hub/v1/channels/register'));

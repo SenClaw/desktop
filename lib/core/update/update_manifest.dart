@@ -37,6 +37,7 @@ class UpdateManifest {
     this.notes,
     this.publishedAt,
     this.minVersion,
+    this.coreVersion,
   });
 
   final Version version;
@@ -50,6 +51,10 @@ class UpdateManifest {
   /// Builds older than this cannot update straight to [version] (reserved for
   /// releases with a migration that needs a stop along the way). Unset today.
   final Version? minVersion;
+
+  /// The senclaw core bundled in this release. Absent from manifests built
+  /// before CI recorded it.
+  final String? coreVersion;
 
   /// Tolerant on purpose: a malformed or half-understood manifest yields null
   /// so the caller can stay quiet, rather than throwing into the user's face
@@ -85,6 +90,9 @@ class UpdateManifest {
           raw['publishedAt'] is String ? DateTime.tryParse(raw['publishedAt'] as String) : null,
       minVersion: raw['minVersion'] is String
           ? Version.tryParse(raw['minVersion'] as String)
+          : null,
+      coreVersion: raw['coreVersion'] is String && (raw['coreVersion'] as String).isNotEmpty
+          ? raw['coreVersion'] as String
           : null,
     );
   }

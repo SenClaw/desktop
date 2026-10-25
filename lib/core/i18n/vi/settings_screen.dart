@@ -134,6 +134,27 @@ const Map<String, String> viSettingsScreen = {
   'Development build': 'Bản build dev',
   'Version {v}': 'Phiên bản {v}',
   'Installed at {path}': 'Cài tại {path}',
+  'It brings SenClaw core {v}.': 'Kèm SenClaw core {v}.',
+  // SenClaw Core card (core_version_card.dart)
+  'Reading the core version…': 'Đang đọc phiên bản core…',
+  'No core is running.': 'Không có core nào đang chạy.',
+  'The running core did not report its version.':
+      'Core đang chạy không báo phiên bản.',
+  'Running from {path}': 'Chạy từ {path}',
+  'Core in this app: {v}': 'Core đi kèm ứng dụng: {v}',
+  'The running core is a different build from the one in this app. Screens '
+          'may offer things it does not support, or miss things it does.':
+      'Core đang chạy khác bản với core đi kèm ứng dụng. Giao diện có thể hiện '
+          'tính năng core không hỗ trợ, hoặc thiếu tính năng core có.',
+  'Started by this app from its own bundle.':
+      'Do ứng dụng khởi động từ bundle của chính nó.',
+  'Already running when this app started — this app did not start it.':
+      'Đã chạy sẵn khi ứng dụng mở — không do ứng dụng khởi động.',
+  'Served by the daemon this console is connected to.':
+      'Do daemon mà bảng điều khiển này kết nối tới phục vụ.',
+  'The app has no core running.': 'Ứng dụng không có core nào đang chạy.',
+  'App bundle': 'Trong bundle ứng dụng',
+  'Standalone install': 'Cài riêng',
   'The web console is served by the daemon and updates with it. '
           'Update the daemon on the host machine: senclaw update':
       'Bảng điều khiển web do daemon phục vụ và cập nhật cùng daemon. '

@@ -34,6 +34,7 @@ import '../../theme/tokens.dart';
 import 'pairing_section.dart';
 import 'browser_section.dart';
 import 'code_autonomy_field.dart';
+import 'core_version_card.dart';
 import 'sen_link_section.dart';
 import 'decision_section.dart';
 import 'local_models_section.dart';
@@ -480,6 +481,14 @@ class UpdatesSection extends ConsumerWidget {
               ),
               const SizedBox(height: AppTokens.s12),
               _UpdateStatusLine(state: s),
+              if (s.hasUpdate && s.manifest?.coreVersion != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  context.trArgs('It brings SenClaw core {v}.',
+                      {'v': s.manifest!.coreVersion}),
+                  style: TextStyle(color: c.textMuted, fontSize: 12),
+                ),
+              ],
               if (s.phase == UpdatePhase.downloading) ...[
                 const SizedBox(height: AppTokens.s8),
                 LinearProgressIndicator(value: s.progress),
@@ -503,6 +512,8 @@ class UpdatesSection extends ConsumerWidget {
             ],
           ),
         ),
+        const SizedBox(height: AppTokens.s16),
+        const CoreVersionCard(),
         const SizedBox(height: AppTokens.s16),
 
         if (!canUpdate)

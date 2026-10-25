@@ -372,14 +372,28 @@ jobs:
             exit 1
           fi
 
+          # The senclaw core this release bundles, so the app's Updates panel
+          # can say which core an update brings (the desktop and core versions
+          # are different numbers). Read from the Linux daemon this run built —
+          # the one binary this runner can execute; left out when it is missing.
+          CORE=""
+          DAEMON=release-artifacts/senclaw-x86_64-unknown-linux-gnu
+          if [ -f "$DAEMON" ]; then
+            chmod +x "$DAEMON"
+            CORE=$("$DAEMON" --version | awk '{print $2}') || CORE=""
+          fi
+          echo "bundled core: ${CORE:-unknown}"
+
           # jq builds the JSON so arbitrary commit subjects in $NOTES cannot
           # break escaping.
           jq -n --arg v "$VER" \
                 --arg p "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                 --arg n "$NOTES" \
                 --arg m "0.0.0" \
+                --arg c "$CORE" \
                 --argjson a "$ASSETS" \
-                '{version: $v, publishedAt: $p, notes: $n, minVersion: $m, assets: $a}' \
+                '{version: $v, publishedAt: $p, notes: $n, minVersion: $m, assets: $a}
+                 + (if $c == "" then {} else {coreVersion: $c} end)' \
                 > release-artifacts/latest.json
           cat release-artifacts/latest.json
 

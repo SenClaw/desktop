@@ -60,7 +60,7 @@ void main() {
       (w.decoration as BoxDecoration).borderRadius ==
           BorderRadius.circular(AppTokens.rXl));
 
-  testWidgets('closed, reasoning is one quiet line with its size after it',
+  testWidgets('closed, reasoning is one quiet line with a bulb and its size',
       (tester) async {
     await tester.pumpWidget(host([
       item(agent('<think>First I look.\n\nThen I write.</think>', tokens: 718)),
@@ -70,8 +70,8 @@ void main() {
     expect(find.text('think'), findsOneWidget);
     expect(find.text('718 tok'), findsOneWidget);
     expect(find.byIcon(Icons.arrow_right), findsOneWidget);
-    // No bulb, no bubble, and none of the words yet.
-    expect(find.byIcon(Icons.lightbulb), findsNothing);
+    // The bulb, no bubble, and none of the words yet.
+    expect(find.byIcon(Icons.lightbulb), findsOneWidget);
     expect(find.textContaining('First I look', findRichText: true),
         findsNothing);
     expect(box, findsNothing);
@@ -92,10 +92,11 @@ void main() {
     expect(find.byIcon(Icons.arrow_drop_down), findsOneWidget);
     expect(box, findsOneWidget);
 
-    // A tool group opens into a box of exactly this look.
+    // A tool group opens into a box of exactly this look, and has no bulb.
     await tester.tap(find.text('Ran a command'));
     await tester.pump();
     expect(box, findsNWidgets(2));
+    expect(find.byIcon(Icons.lightbulb), findsOneWidget);
   });
 
   testWidgets('an answer keeps its bubble and reasoning stays above it',

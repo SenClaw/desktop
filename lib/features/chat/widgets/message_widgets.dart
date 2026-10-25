@@ -410,8 +410,8 @@ List<_Part> _splitThink(String text) {
       .toList();
 }
 
-/// A model's reasoning, on a line of its own: the word "think" and a caret,
-/// closed; opened, the same rounded box a tool group opens into. It is never
+/// A model's reasoning, on a line of its own: a bulb, the word "think" and a
+/// caret, closed; opened, the same rounded box a tool group opens into. It is never
 /// part of a message bubble and never counted in a tool group.
 class _ThinkLine extends StatefulWidget {
   const _ThinkLine({required this.text, this.tokens});
@@ -435,6 +435,9 @@ class _ThinkLineState extends State<_ThinkLine> {
           label: context.tr('think'),
           open: _open,
           onTap: () => setState(() => _open = !_open),
+          // The filled bulb in the info accent: what tells reasoning from a
+          // tool group at a glance.
+          leading: Icon(Icons.lightbulb, size: 14, color: c.accent),
           trailing: [
             if (widget.tokens != null) ...[
               const SizedBox(width: AppTokens.s8),
@@ -1003,11 +1006,15 @@ class _QuietHeader extends StatelessWidget {
     required this.label,
     required this.open,
     required this.onTap,
+    this.leading,
     this.trailing = const [],
   });
   final String label;
   final bool open;
   final VoidCallback onTap;
+
+  /// An icon before the words, for a line that is not a count of work done.
+  final Widget? leading;
 
   /// Figures or counts that sit between the words and the caret.
   final List<Widget> trailing;
@@ -1021,6 +1028,10 @@ class _QuietHeader extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (leading != null) ...[
+                leading!,
+                const SizedBox(width: AppTokens.s8),
+              ],
               Flexible(
                 child: Text(label,
                     maxLines: 1,

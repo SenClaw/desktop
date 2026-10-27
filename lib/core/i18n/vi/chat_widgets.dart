@@ -112,4 +112,16 @@ const Map<String, String> viChatWidgets = {
   // Tool parameter rendering (ToolParams)
   'Yes': 'Có',
   'No': 'Không',
+
+  // slash_mention_input.dart — spec-flow commands in the / menu
+  '<idea> — explore it and write a brief in docs/designs/':
+      '<ý tưởng> — khám phá và viết bản tóm tắt trong docs/designs/',
+  '[path] — turn the open brief into a full spec':
+      '[đường dẫn] — biến bản tóm tắt đang mở thành spec đầy đủ',
+  '[path] — four reviewers with no context check the spec':
+      '[đường dẫn] — bốn người duyệt không có ngữ cảnh kiểm tra spec',
+  '[force] — approve the reviewed spec; code changes unlock':
+      '[force] — duyệt spec đã review; mở khoá sửa code',
+  '[use <path>|done|skip] — show, switch, close or skip the open spec':
+      '[use <đường dẫn>|done|skip] — xem, chuyển, đóng hoặc bỏ qua spec đang mở',
 };

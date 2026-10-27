@@ -68,6 +68,49 @@ void main() {
     expect(find.text('/pdf'), findsNothing);
   });
 
+  testWidgets('a bare slash lists the spec-flow commands before the skills',
+      (tester) async {
+    await pump(tester);
+    await type(tester, '/');
+    for (final name in ['brainstorm', 'draft', 'review', 'approve', 'spec']) {
+      expect(find.text('/$name'), findsOneWidget, reason: name);
+    }
+    expect(find.textContaining('four reviewers with no context'), findsOneWidget);
+    expect(find.text('/agent-browser'), findsOneWidget);
+    // Commands lead: the first row is `brainstorm`, ahead of any skill.
+    expect(tester.getTopLeft(find.text('/brainstorm')).dy,
+        lessThan(tester.getTopLeft(find.text('/agent-browser')).dy));
+  });
+
+  testWidgets('picking a command inserts it the way a skill is inserted',
+      (tester) async {
+    final ctrl = await pump(tester);
+    await type(tester, '/revi');
+    await tester.tap(find.text('/review'));
+    await tester.pumpAndSettle();
+    expect(ctrl.text, '/review ');
+    expect(find.text('/approve'), findsNothing);
+  });
+
+  testWidgets('a command named by what was typed leads the list',
+      (tester) async {
+    await pump(tester);
+    // `draft`, `review` and `approve` all mention a spec in their description;
+    // `spec` itself must still be the first row, or Enter would pick another.
+    // The query stops short of the name so `/spec` is only the popup row.
+    await type(tester, '/spe');
+    expect(find.text('/spec'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('/spec')).dy,
+        lessThan(tester.getTopLeft(find.text('/draft')).dy));
+  });
+
+  testWidgets('hash does not offer the commands', (tester) async {
+    await pump(tester);
+    await type(tester, '#');
+    expect(find.text('#review'), findsNothing);
+    expect(find.text('#pdf'), findsOneWidget);
+  });
+
   testWidgets('hash lists the same skills', (tester) async {
     await pump(tester);
     // Query stops short of the full name so the only `#pdf` on screen is the

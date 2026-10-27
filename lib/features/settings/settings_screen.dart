@@ -34,6 +34,7 @@ import '../../theme/tokens.dart';
 import 'pairing_section.dart';
 import 'browser_section.dart';
 import 'code_autonomy_field.dart';
+import 'spec_flow_field.dart';
 import 'core_version_card.dart';
 import 'sen_link_section.dart';
 import 'decision_section.dart';
@@ -1585,6 +1586,19 @@ class _GeneralSection extends ConsumerWidget {
                       {...b, 'codeAutonomy': v}, agentBehaviorProvider);
                   // Not done until the reload shows the saved level, so the
                   // control never flashes the old one in between.
+                  await ref.read(agentBehaviorProvider.future);
+                },
+              ),
+            // Absent from a daemon that predates the spec flow: no control then.
+            if (b['specFlow'] is String)
+              SpecFlowField(
+                mode: b['specFlow'] as String,
+                onChanged: (v) async {
+                  // Only the changed key: the daemon merges a partial body.
+                  await api.post('/api/agent-behavior', {'specFlow': v},
+                      agentBehaviorProvider);
+                  // Not done until the reload shows the saved mode (same as
+                  // the approval level above).
                   await ref.read(agentBehaviorProvider.future);
                 },
               ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/i18n/l10n.dart';
 import '../../../core/transport/connection.dart';
 import '../../../theme/tokens.dart';
 import '../../plugins/plugins_screen.dart' show skillsProvider;
@@ -9,9 +10,21 @@ import '../../plugins/plugins_screen.dart' show skillsProvider;
 class MentionSuggestion {
   const MentionSuggestion(this.insert, this.kind, this.desc);
   final String insert;
-  final String kind; // skill | file | folder
+  final String kind; // skill | command | file | folder
   final String? desc;
 }
+
+/// The spec-flow chat commands (design before code) as `(name, argument hint
+/// and description)`. The daemon handles them when the message is sent; the
+/// composer only offers them in the `/` menu. The English text is the i18n key;
+/// keep `vi/chat_widgets.dart` in step.
+const kSpecCommands = <(String, String)>[
+  ('brainstorm', '<idea> — explore it and write a brief in docs/designs/'),
+  ('draft', '[path] — turn the open brief into a full spec'),
+  ('review', '[path] — four reviewers with no context check the spec'),
+  ('approve', '[force] — approve the reviewed spec; code changes unlock'),
+  ('spec', '[use <path>|done|skip] — show, switch, close or skip the open spec'),
+];
 
 /// Workspace a `@` picker draws from, encoded so it can key a provider family.
 /// `jid:<jid>` asks the daemon to resolve the chat's own workspace; `path:<abs>`
@@ -49,7 +62,8 @@ final mentionFilesProvider =
 });
 
 /// A chat input that pops a suggestion list when the caret follows a `/` or `#`
-/// (skills) or `@` (workspace files & folders) trigger token. Tab/Enter or click
+/// (skills; `/` also the spec-flow commands) or `@` (workspace files & folders)
+/// trigger token. Tab/Enter or click
 /// inserts; ↑/↓ navigate; Esc dismisses. Falls through to [onSend] when no popup
 /// is open.
 class SlashMentionField extends ConsumerStatefulWidget {
@@ -143,10 +157,15 @@ class _SlashMentionFieldState extends ConsumerState<SlashMentionField> {
       source =
           ref.watch(mentionFilesProvider(widget.fileScope)).valueOrNull ?? const [];
     } else {
-      // `/` and `#` both pin a skill — the daemon accepts either form.
-      source = (ref.watch(skillsProvider).valueOrNull ?? [])
-          .map((s) => MentionSuggestion(s.name, 'skill', s.description))
-          .toList();
+      // `/` and `#` both pin a skill — the daemon accepts either form. The
+      // commands are typed with `/` only, and come first.
+      source = [
+        if (_trigger == '/')
+          for (final (name, desc) in kSpecCommands)
+            MentionSuggestion(name, 'command', context.tr(desc)),
+        for (final s in ref.watch(skillsProvider).valueOrNull ?? const [])
+          MentionSuggestion(s.name, 'skill', s.description),
+      ];
     }
     final q = _query;
     final filtered = source
@@ -154,7 +173,12 @@ class _SlashMentionFieldState extends ConsumerState<SlashMentionField> {
             i.insert.toLowerCase().contains(q) ||
             (i.desc ?? '').toLowerCase().contains(q))
         .toList();
-    return filtered.take(12).toList();
+    if (_trigger == '@') return filtered.take(12).toList();
+    // A name that starts with what was typed leads, so `/spec` + Enter picks
+    // `spec` and not `draft`, whose description merely mentions a spec.
+    final named = filtered.where((i) => i.insert.toLowerCase().startsWith(q));
+    final rest = filtered.where((i) => !i.insert.toLowerCase().startsWith(q));
+    return [...named, ...rest].take(12).toList();
   }
 
   void _apply(MentionSuggestion s) {
@@ -391,6 +415,7 @@ class _SlashMentionFieldState extends ConsumerState<SlashMentionField> {
     final c = context.colors;
     final (color, icon) = switch (kind) {
       'skill' => (AppTokens.brand, Icons.bolt_outlined),
+      'command' => (AppTokens.brandAlt, Icons.terminal),
       'folder' => (AppTokens.warning, Icons.folder_outlined),
       _ => (c.textMuted, Icons.insert_drive_file_outlined),
     };

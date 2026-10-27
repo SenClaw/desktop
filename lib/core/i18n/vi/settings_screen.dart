@@ -50,6 +50,30 @@ const Map<String, String> viSettingsScreen = {
   'Could not change the approval level: {e}':
       'Không đổi được mức duyệt: {e}',
 
+  // General → Agent behavior → Design before code (specFlow)
+  'Design before code': 'Thiết kế trước khi code',
+  'Whether the agent needs an approved spec before it changes code.':
+      'Agent có cần một spec đã duyệt trước khi sửa code hay không.',
+  'Design first': 'Thiết kế trước',
+  'When a spec exists': 'Khi có spec',
+  'A code session or project chat needs an approved spec before '
+          'its first code change; /spec skip waives it for a small fix.':
+      'Phiên code hoặc chat dự án phải có spec đã duyệt trước lần sửa code '
+          'đầu tiên; /spec skip bỏ qua bước này cho một sửa nhỏ.',
+  'Only a folder that already has an open spec is held — one started '
+          'with /brainstorm.':
+      'Chỉ thư mục đã có spec đang mở (bắt đầu bằng /brainstorm) mới bị '
+          'giữ lại.',
+  'No spec flow: the agent changes code without a design step.':
+      'Không dùng luồng spec: agent sửa code mà không qua bước thiết kế.',
+  'Type /brainstorm, /draft, /review and /approve in the chat to '
+          'move a spec along; /spec shows the open one, switches, closes '
+          'or skips it.':
+      'Gõ /brainstorm, /draft, /review và /approve trong chat để đưa spec đi '
+          'tiếp; /spec cho xem spec đang mở, chuyển, đóng hoặc bỏ qua.',
+  'Could not change design before code: {e}':
+      'Không đổi được thiết lập thiết kế trước khi code: {e}',
+
   // General → Network access (daemon bind host)
   'Network access': 'Truy cập mạng',
   'Who can reach this daemon. Private keeps it on this machine; '

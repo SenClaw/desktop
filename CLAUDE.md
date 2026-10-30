@@ -161,6 +161,18 @@ Rules:
   (`bgRunningCountProvider`). One `bgProcessesProvider` polls every 3 s for all three. They
   are not the scheduled tasks of `BackgroundScreen`. A test that mounts `AppShell` must
   override `bgProcessesProvider` (the rail watches it), as `projects_layout_test.dart` does.
+- **File pane (`lib/features/file_pane/`)** is what a file row of a `ToolGroupCard` opens: the
+  file beside the chat, read through `GET /api/workspace/file` (the daemon route the dock's Files
+  tab uses; 512 KB cap). `FilePaneSplit` positions the chat instead of reparenting it, so a
+  half-typed message survives the pane opening, expanding and covering it in a narrow window. The
+  pane and `RightDock` share the room beside the chat: an open file hides the dock with
+  `Visibility(maintainState)` (its Terminal tab is a live shell), and the dock toggle swaps them.
+  State is per chat and in memory (`filePaneProvider`). Two things not to undo:
+  `parseMarkdown` cuts long sections because `gpt_markdown` froze the UI for a minute on 256 KB
+  of one section (3 s on 512 KB cut up, debug build; a section it cannot cut opens as text), and
+  search in the rendered view reads the laid-out `RenderParagraph`s and paints over them, because
+  the package has no way to style a run of plain text. The mini window has no pane
+  (`subWindowIdProvider`), so its rows open their detail as before.
 - **`InlineDispatchCard` (`lib/features/chat/widgets/message_widgets.dart`)**
   renders a DAG's goal/status/per-task state inline in chat and carries the
   retry buttons (`POST /api/dispatch/parents/:id/retry`,

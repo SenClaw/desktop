@@ -18,6 +18,7 @@ import '../dock/right_dock.dart';
 import '../dock/dispatch_provider.dart';
 import 'dispatch_ownership.dart';
 import '../dock/todos_provider.dart';
+import '../file_pane/file_pane_provider.dart';
 import 'agent_usage_provider.dart';
 import 'audio_service.dart';
 import 'conversation_provider.dart';
@@ -229,11 +230,38 @@ class _ConversationPaneState extends ConsumerState<ConversationPane> {
     return pos.maxScrollExtent - pos.pixels < 240;
   }
 
+  /// The dock and the file pane share the space beside the chat. A file on top
+  /// of the dock would make this button do nothing visible, so it swaps them.
+  void _toggleDock() {
+    final files = ref.read(filePaneProvider(widget.jid));
+    if (files.isOpen) {
+      ref.read(filePaneProvider(widget.jid).notifier).hide();
+      ref.read(dockVisibleProvider.notifier).state = true;
+    } else {
+      ref.read(dockVisibleProvider.notifier).update((v) => !v);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final convo = ref.watch(conversationProvider(widget.jid));
     final notifier = ref.read(conversationProvider(widget.jid).notifier);
+    // The file pane doesn't exist in the mini window, like the right dock.
+    final openFile = ref.watch(subWindowIdProvider) != null
+        ? null
+        : (String path) => openFileInPane(
+              ref,
+              jid: widget.jid,
+              path: resolveChatPath(
+                path,
+                ref
+                    .read(groupsProvider)
+                    .where((g) => g.jid == widget.jid)
+                    .firstOrNull
+                    ?.workDir,
+              ),
+            );
     final kind = widget.jid.startsWith('cowork:')
         ? 'cowork'
         : widget.jid.startsWith('schedule:')
@@ -367,9 +395,7 @@ class _ConversationPaneState extends ConsumerState<ConversationPane> {
                     IconButton(
                       tooltip: context.tr('Toggle console / workbench'),
                       icon: const Icon(Icons.view_sidebar_outlined, size: 18),
-                      onPressed: () => ref
-                          .read(dockVisibleProvider.notifier)
-                          .update((v) => !v),
+                      onPressed: _toggleDock,
                     ),
                     if (dot != null)
                       Positioned(
@@ -448,7 +474,10 @@ class _ConversationPaneState extends ConsumerState<ConversationPane> {
                           group.add(slice[i]);
                           i++;
                         }
-                        out.add(ToolGroupCard(tools: group));
+                        out.add(ToolGroupCard(
+                          tools: group,
+                          onOpenFile: openFile,
+                        ));
                       } else {
                         out.add(MessageItem(
                           message: slice[i],
@@ -730,8 +759,12 @@ class _Composer extends ConsumerWidget {
                   ? const ['Agent', 'Dag']
                   : const ['Agent', 'Plan', 'Dag'],
             );
-            final modelChip =
-                _ModelPickerChip(jid: jid, label: modelLabel, configs: configs);
+            final modelChip = _ModelPickerChip(
+              jid: jid,
+              label: modelLabel,
+              configs: configs,
+              shrinks: compact,
+            );
             final attachBtn = IconButton(
               tooltip: context.tr('Attach images'),
               icon: const Icon(Icons.attach_file, size: 18),
@@ -792,14 +825,28 @@ class _Composer extends ConsumerWidget {
 /// Compact model-picker chip used in the composer action row.
 class _ModelPickerChip extends ConsumerWidget {
   const _ModelPickerChip(
-      {required this.jid, required this.label, required this.configs});
+      {required this.jid,
+      required this.label,
+      required this.configs,
+      this.shrinks = false});
   final String jid;
   final String label;
   final List<LlmConfig> configs;
 
+  /// The name gives way when the row is short. Only in a row that bounds the
+  /// chip: the wide row lays it out at its natural width.
+  final bool shrinks;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
+    final name = ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 180),
+      child: Text(label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: c.textSecondary, fontSize: 12)),
+    );
     return Material(
       color: Colors.transparent,
       child: PopupMenuButton<String>(
@@ -825,13 +872,7 @@ class _ModelPickerChip extends ConsumerWidget {
             children: [
               Icon(Icons.smart_toy_outlined, size: 14, color: c.textMuted),
               const SizedBox(width: AppTokens.s6),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 180),
-                child: Text(label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: c.textSecondary, fontSize: 12)),
-              ),
+              if (shrinks) Flexible(child: name) else name,
               Icon(Icons.expand_more, size: 16, color: c.textMuted),
             ],
           ),

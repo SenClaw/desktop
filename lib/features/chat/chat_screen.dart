@@ -6,6 +6,8 @@ import '../../theme/tokens.dart';
 import '../../core/transport/connection.dart';
 import '../../models/group.dart';
 import '../dock/right_dock.dart';
+import '../file_pane/file_pane_provider.dart';
+import '../file_pane/file_pane_split.dart';
 import '../space/event_link.dart';
 import '../workflow/workflow_session_pane.dart';
 import 'agents_provider.dart';
@@ -113,20 +115,30 @@ class ChatScreen extends ConsumerWidget {
                   : Row(
                       children: [
                         Expanded(
-                          child: ConversationPane(
-                            key: ValueKey(selected),
+                          child: FilePaneSplit(
                             jid: selected,
-                            title: groups
-                                .firstWhere(
-                                  (g) => g.jid == selected,
-                                  orElse: () =>
-                                      GroupInfo(jid: selected, name: selected),
-                                )
-                                .name,
+                            chat: ConversationPane(
+                              key: ValueKey(selected),
+                              jid: selected,
+                              title: groups
+                                  .firstWhere(
+                                    (g) => g.jid == selected,
+                                    orElse: () => GroupInfo(
+                                        jid: selected, name: selected),
+                                  )
+                                  .name,
+                            ),
                           ),
                         ),
+                        // Steps aside for an open file, kept alive: its
+                        // Terminal tab is a running shell.
                         if (ref.watch(dockVisibleProvider))
-                          RightDock(jid: selected),
+                          Visibility(
+                            visible:
+                                !ref.watch(filePaneProvider(selected)).isOpen,
+                            maintainState: true,
+                            child: RightDock(jid: selected),
+                          ),
                       ],
                     ),
         ),

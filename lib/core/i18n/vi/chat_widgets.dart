@@ -1,6 +1,24 @@
 /// Vietnamese strings for this area. English string = key. Filled by the
 /// localization sweep; keep entries sorted roughly by screen order.
 const Map<String, String> viChatWidgets = {
+  // file_pane — the files a chat opened
+  'Search in file': 'Tìm trong tệp',
+  'Contents': 'Mục lục',
+  'View source': 'Xem mã nguồn',
+  'View rendered': 'Xem bản hiển thị',
+  'Close file': 'Đóng tệp',
+  'Previous match': 'Kết quả trước',
+  'Next match': 'Kết quả sau',
+  'Cannot open {name}': 'Không mở được {name}',
+  'Cannot show {name}': 'Không hiển thị được {name}',
+  'This file does not exist, or the path is a folder.':
+      'Tệp này không tồn tại, hoặc đường dẫn là một thư mục.',
+  'The path is relative and this chat has no working folder.':
+      'Đường dẫn là tương đối và cuộc trò chuyện này không có thư mục làm việc.',
+  'This is a binary file, not text.': 'Đây là tệp nhị phân, không phải văn bản.',
+  'This file is over 512 KB and could not be read as text.':
+      'Tệp này lớn hơn 512 KB và không đọc được dưới dạng văn bản.',
+  'SenClaw did not answer in time.': 'SenClaw không phản hồi kịp.',
   'The diagram renderer did not respond.':
       'Bộ vẽ sơ đồ không phản hồi.',
   // Mermaid diagram fallback on a platform with no embedded webview.

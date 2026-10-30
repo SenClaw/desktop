@@ -847,12 +847,16 @@ List<InlineSpan> _statSpans(({int plus, int minus}) s) => [
 class _FileStep {
   const _FileStep({
     required this.verb,
+    required this.path,
     required this.name,
     required this.dir,
     this.range,
     this.stats,
   });
   final String verb;
+
+  /// The file as the tool named it; relative on a call that was refused.
+  final String path;
   final String name;
   final String dir;
 
@@ -894,6 +898,7 @@ _FileStep? _fileStepOf(BuildContext context, ChatMessage t) {
       _FileKind.write =>
         context.tr(_writeIsUpdate(t) ? 'Updated' : 'Wrote'),
     },
+    path: path,
     name: name,
     dir: cut > 0 ? path.substring(0, cut) : '',
     range: range,
@@ -919,8 +924,12 @@ String _shortDir(String dir, {int max = 28}) {
 /// output) one more tap away — the detail views are unchanged, only what leads
 /// to them is.
 class ToolGroupCard extends StatefulWidget {
-  const ToolGroupCard({super.key, required this.tools});
+  const ToolGroupCard({super.key, required this.tools, this.onOpenFile});
   final List<ChatMessage> tools;
+
+  /// Called with a file step's path when its row is clicked. Without it (a
+  /// window with no file pane) the row opens its detail, like any other step.
+  final ValueChanged<String>? onOpenFile;
   @override
   State<ToolGroupCard> createState() => _ToolGroupCardState();
 }
@@ -967,7 +976,11 @@ class _ToolGroupCardState extends State<ToolGroupCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 for (var i = 0; i < widget.tools.length; i++)
-                  _StepRow(tool: widget.tools[i], first: i == 0),
+                  _StepRow(
+                    tool: widget.tools[i],
+                    first: i == 0,
+                    onOpenFile: widget.onOpenFile,
+                  ),
               ],
             ),
           ),
@@ -1092,8 +1105,9 @@ class _Caret extends StatelessWidget {
 /// the step was for, and whose body (one tap away) is the command, diff or
 /// output it produced.
 class _StepRow extends StatefulWidget {
-  const _StepRow({required this.tool, required this.first});
+  const _StepRow({required this.tool, required this.first, this.onOpenFile});
   final ChatMessage tool;
+  final ValueChanged<String>? onOpenFile;
 
   /// The first row sits against the list's own border; the rest are divided
   /// from the row above.
@@ -1114,6 +1128,8 @@ class _StepRowState extends State<_StepRow> {
     final hasDetail = t.toolContent.isNotEmpty;
     final file = _fileStepOf(context, t);
     final style = TextStyle(color: c.textSecondary, fontSize: 13.5);
+    final toggle = hasDetail ? () => setState(() => _open = !_open) : null;
+    final onOpenFile = widget.onOpenFile;
     return Container(
       decoration: BoxDecoration(
         border: widget.first ? null : Border(top: BorderSide(color: c.border)),
@@ -1122,10 +1138,11 @@ class _StepRowState extends State<_StepRow> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           InkWell(
-            onTap: hasDetail ? () => setState(() => _open = !_open) : null,
+            onTap: file != null && onOpenFile != null
+                ? () => onOpenFile(file.path)
+                : toggle,
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: _kStepPadX, vertical: 11),
+              padding: const EdgeInsets.symmetric(horizontal: _kStepPadX),
               child: Row(
                 children: [
                   // One line, always. Everything else — the command's output,
@@ -1134,14 +1151,17 @@ class _StepRowState extends State<_StepRow> {
                   // display this replaced. A short line leaves the caret right
                   // after it; a long one fades out and pushes it to the edge.
                   Flexible(
-                    child: Text.rich(
-                      file == null
-                          ? TextSpan(text: stepHeadline(context, t))
-                          : _fileLine(c, file),
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.fade,
-                      style: style,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      child: Text.rich(
+                        file == null
+                            ? TextSpan(text: stepHeadline(context, t))
+                            : _fileLine(c, file),
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.fade,
+                        style: style,
+                      ),
                     ),
                   ),
                   if (!t.toolOk)
@@ -1150,7 +1170,16 @@ class _StepRowState extends State<_StepRow> {
                       child: Text(context.tr('Failed'),
                           style: style.copyWith(color: AppTokens.danger)),
                     ),
-                  if (hasDetail) _Caret(open: _open),
+                  // Its own target: on a file row the rest of the row opens
+                  // the file, and the diff is still here.
+                  if (hasDetail)
+                    InkWell(
+                      onTap: toggle,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        child: _Caret(open: _open),
+                      ),
+                    ),
                 ],
               ),
             ),

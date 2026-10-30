@@ -65,7 +65,7 @@ jobs:
   check:
     name: Cargo test (update_desktop) + Flutter analyze/test
     if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:

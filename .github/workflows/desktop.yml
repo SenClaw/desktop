@@ -65,7 +65,7 @@ jobs:
   check:
     name: Cargo test (update_desktop) + Flutter analyze/test
     if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -258,6 +258,20 @@ jobs:
               APP="desktop/build/macos/Build/Products/Release/SenClaw Desktop.app"
               cp "$BIN_DIR/senclaw" "$APP/Contents/Resources/senclaw"
               cp "$UPD_DIR/update_desktop" "$APP/Contents/Resources/update_desktop"
+              # Flutter signed the bundle before these two were copied in, so
+              # its seal no longer matches and `codesign --verify` fails. Seal
+              # it again, ad-hoc like the Flutter build. The entitlements come
+              # from that signature: a plain --force would drop them, and
+              # file_picker fails without them.
+              ENTITLEMENTS="$RUNNER_TEMP/app.entitlements"
+              codesign -d --entitlements - --xml "$APP" > "$ENTITLEMENTS"
+              codesign --force -s - "$APP/Contents/Resources/senclaw"
+              codesign --force -s - "$APP/Contents/Resources/update_desktop"
+              codesign --force -s - --entitlements "$ENTITLEMENTS" "$APP"
+              if ! codesign --verify --deep --strict "$APP"; then
+                echo "::error::the app bundle fails codesign --verify; every user would get a broken signature"
+                exit 1
+              fi
               # zip the .app for upload
               ditto -c -k --keepParent "$APP" "dist-artifacts/SenClaw-${{ matrix.target }}.app.zip"
               cp "$BIN_DIR/senclaw" "dist-artifacts/senclaw-${{ matrix.target }}"

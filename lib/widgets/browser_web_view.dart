@@ -9,11 +9,24 @@ import 'browser_url.dart';
 
 /// A popup never opens in here: a web page goes to the OS browser and any other
 /// scheme is dropped. Answering true is what keeps it out of this webview, since
-/// false has the plugin load the request in place.
-Future<bool> _openPopupExternally(Uri? url) async {
-  await openWebUrlExternally(url);
+/// false has the plugin load the request in place. Only WebView2 reports a popup
+/// with no click (`hasGesture` false; WebKit's null means it already filtered):
+/// its popup blocker is off, so a page could otherwise open tabs without end.
+Future<bool> _openPopupExternally(CreateWindowAction action) async {
+  if (action.hasGesture != false) await openWebUrlExternally(action.request.url);
   return true;
 }
+
+/// WebView2 offers an unknown top-frame scheme to the OS itself, and a page can
+/// ask for one with `location = 'ms-msdt:...'`; WebKit only fails the load.
+NavigationActionPolicy _pageNavigation(NavigationAction action, Set<String> allowed) {
+  final scheme = action.request.url?.scheme.toLowerCase() ?? '';
+  return action.isForMainFrame == false || allowed.contains(scheme)
+      ? NavigationActionPolicy.ALLOW
+      : NavigationActionPolicy.CANCEL;
+}
+
+const _pageSchemes = {'', 'http', 'https', 'about', 'blob', 'data'};
 
 /// Live navigation state reported up to the browser chrome (address bar, nav
 /// buttons) so it can reflect the current page.
@@ -126,7 +139,10 @@ class _BrowserWebViewState extends State<BrowserWebView> {
         // that one out of the pane.
         javaScriptCanOpenWindowsAutomatically: false,
         supportMultipleWindows: true,
+        useShouldOverrideUrlLoading: true,
       ),
+      shouldOverrideUrlLoading: (c, action) async =>
+          _pageNavigation(action, _pageSchemes),
       onWebViewCreated: (c) {
         _ctrl = c;
         widget.onControllerReady?.call(BrowserWebController._(c));
@@ -160,8 +176,7 @@ class _BrowserWebViewState extends State<BrowserWebView> {
       },
       // A browser follows links in place; only window.open / target=_blank
       // popups (which would be a broken in-webview window) leave the pane.
-      onCreateWindow: (controller, action) =>
-          _openPopupExternally(action.request.url),
+      onCreateWindow: (controller, action) => _openPopupExternally(action),
     );
   }
 }
@@ -222,9 +237,14 @@ class EmbeddedHtmlContent extends StatelessWidget {
         encoding: 'utf8',
         baseUrl: baseUrl != null ? WebUri(baseUrl!) : null,
       ),
-      initialSettings: InAppWebViewSettings(transparentBackground: true),
-      onCreateWindow: (controller, action) =>
-          _openPopupExternally(action.request.url),
+      initialSettings: InAppWebViewSettings(
+        transparentBackground: true,
+        useShouldOverrideUrlLoading: true,
+      ),
+      // Its own base is a `file:` folder.
+      shouldOverrideUrlLoading: (c, action) async =>
+          _pageNavigation(action, {..._pageSchemes, 'file'}),
+      onCreateWindow: (controller, action) => _openPopupExternally(action),
     );
   }
 }

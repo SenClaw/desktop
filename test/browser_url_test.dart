@@ -70,4 +70,39 @@ void main() {
       expect(isWebUrl(Uri.parse(bad)), isFalse, reason: bad);
     }
   });
+
+  test('isExternalLink adds only mailto and tel to the web', () {
+    expect(isExternalLink(Uri.parse('https://example.com')), isTrue);
+    expect(isExternalLink(Uri.parse('mailto:a@b.c')), isTrue);
+    expect(isExternalLink(Uri.parse('tel:+84123')), isTrue);
+    expect(isExternalLink(null), isFalse);
+    for (final bad in const ['ms-msdt:/id', 'smb://a/x', 'file:///x', 'vscode://f']) {
+      expect(isExternalLink(Uri.parse(bad)), isFalse, reason: bad);
+    }
+  });
+
+  test('isLoopbackUrl covers every spelling of this machine', () {
+    for (final local in const [
+      'http://localhost:3000/',
+      'http://LOCALHOST:3000/',
+      'http://127.0.0.1:5173/',
+      'http://127.8.8.8/',
+      'http://0.0.0.0:8080/',
+      'http://[::1]:8080/',
+      'http://127.1:3000/',
+      'http://2130706433/',
+      'http://0x7f.0.0.1/',
+    ]) {
+      expect(isLoopbackUrl(local), isTrue, reason: local);
+    }
+    for (final remote in const [
+      'https://example.com/',
+      'https://localhost.evil.com/',
+      'https://127.0.0.1.evil.com/',
+      'http://8.8.8.8/',
+      'https://cafe.example/',
+    ]) {
+      expect(isLoopbackUrl(remote), isFalse, reason: remote);
+    }
+  });
 }

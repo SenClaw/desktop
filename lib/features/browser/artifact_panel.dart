@@ -6,9 +6,17 @@ import '../dock/workbench_provider.dart';
 
 /// The agent's current artifact above the Browser pane, with its Close.
 class ArtifactHeader extends StatelessWidget {
-  const ArtifactHeader({super.key, required this.artifact, required this.onClose});
+  const ArtifactHeader({
+    super.key,
+    required this.artifact,
+    required this.onClose,
+    this.onOpen,
+  });
   final WorkbenchArtifact artifact;
   final VoidCallback onClose;
+
+  /// Shows the artifact when the pane did not do so by itself.
+  final VoidCallback? onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +38,8 @@ class ArtifactHeader extends StatelessWidget {
                     color: c.textPrimary, fontWeight: FontWeight.w700)),
           ),
           Text(artifact.mode, style: TextStyle(color: c.textMuted, fontSize: 12)),
+          if (onOpen != null)
+            TextButton(onPressed: onOpen, child: Text(context.tr('Open'))),
           IconButton(
             tooltip: context.tr('Close artifact'),
             icon: const Icon(Icons.close, size: 16),

@@ -168,9 +168,11 @@ Rules:
   Every URL it loads or hands to the OS goes through `browserUrlFrom` / `openWebUrlExternally`
   (`lib/widgets/browser_url.dart`): http and https only, because a popup reaches `NSWorkspace.open` /
   `ShellExecuteW` and would otherwise start `ms-msdt:` or `smb:` handlers. `onCreateWindow` answers
-  `true`: false has the plugin load the request in the pane. And nothing opens by itself: a page on a
-  loopback port passes the daemon's local-Origin check and can read provider keys, so a dev server opens
-  only from a click on its chip. `DockTabBody` keeps the Terminal mounted across tab changes, because
+  `true`: false has the plugin load the request in the pane. `embeddedWebView` shares that rule (plus
+  `mailto:` and `tel:`, through `openLinkExternally`), because it hosts remote video pages from model
+  replies. And no loopback page opens by itself (`isLoopbackUrl`): one passes the daemon's local-Origin
+  check and can read provider keys, so a dev server opens from a click on its chip and a `web` artifact
+  from the header's Open, while a remote artifact still shows at once. `DockTabBody` keeps the Terminal mounted across tab changes, because
   unmounting it closes the socket and the daemon kills the shell.
 - **File pane (`lib/features/file_pane/`)** is what a file row of a `ToolGroupCard` opens: the
   file beside the chat, read through `GET /api/workspace/file` (the daemon route the dock's Files

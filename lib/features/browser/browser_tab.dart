@@ -15,7 +15,9 @@ import 'browser_provider.dart';
 /// `/api/bg-tasks`), `workbench:new` url artifacts and local HTML files, in an
 /// embedded WKWebView/WebView2 ([BrowserWebView], free navigation). A static
 /// artifact takes the empty state's place, so typing a URL still works and Home
-/// comes back to it. Per chat (`key: ValueKey(jid)` at the call site).
+/// comes back to it. A loopback page, the agent's or a dev server's, opens only
+/// from a click: see [isLoopbackUrl]. Per chat (`key: ValueKey(jid)` at the call
+/// site).
 class BrowserTab extends ConsumerStatefulWidget {
   const BrowserTab({super.key, required this.jid});
   final String jid;
@@ -59,8 +61,8 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
     if (req != null) {
       _bootUrl = browserUrlFrom(req.url);
       _lastReqSeq = req.seq;
-    } else if (art?.url != null) {
-      _bootUrl = browserUrlFrom(art!.url!);
+    } else if (art?.url != null && !isLoopbackUrl(art!.url!)) {
+      _bootUrl = browserUrlFrom(art.url!);
     }
   }
 
@@ -92,9 +94,21 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
   void _goHome() => setState(() {
         _bootUrl = null;
         _ctrl = null;
+        _pending = null;
         _nav = const BrowserNavState();
         _addr.clear();
       });
+
+  /// What the header's Open does, when the pane is not already showing [art]:
+  /// load a loopback page, or leave the current page for a static artifact.
+  VoidCallback? _artifactOpener(WorkbenchArtifact art) {
+    final url = art.url ?? '';
+    if (url.isEmpty) return _booted ? _goHome : null;
+    final shown = browserUrlFrom(_nav.url.isEmpty ? (_bootUrl ?? '') : _nav.url);
+    return isLoopbackUrl(url) && shown != browserUrlFrom(url)
+        ? () => _go(url)
+        : null;
+  }
 
   void _onControllerReady(BrowserWebController c) {
     _ctrl = c;
@@ -122,19 +136,15 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
       }
     });
 
-    // A new artifact shows at once: a url one here, a static one in the empty
-    // state's place.
+    // A new artifact with a remote URL shows at once. A loopback one waits for
+    // the header's Open, and a static one must not take a page away from under
+    // the person: both leave whatever is on screen alone.
     ref.listen<Map<String, WorkbenchArtifact>>(workbenchProvider, (_, all) {
       final art = _artifactIn(all);
       if (art?.id == _lastArtifactId) return;
       _lastArtifactId = art?.id;
-      if (art == null) return;
-      final url = art.url;
-      if (url != null && url.isNotEmpty) {
-        _go(url);
-      } else {
-        _goHome();
-      }
+      final url = art?.url ?? '';
+      if (url.isNotEmpty && !isLoopbackUrl(url)) _go(url);
     });
 
     final art = _artifactIn(ref.watch(workbenchProvider));
@@ -164,6 +174,7 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
           ArtifactHeader(
             artifact: art,
             onClose: () => workbench.close(widget.jid, art.id),
+            onOpen: _artifactOpener(art),
           ),
         Expanded(
           child: _booted

@@ -2,9 +2,9 @@ import 'dart:collection';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../core/i18n/l10n.dart';
 import '../theme/tokens.dart';
+import 'browser_url.dart';
 
 /// Desktop embed: a real in-app WKWebView/WebView2 on macOS & Windows;
 /// Linux (no embedded webview support) falls back to opening the browser.
@@ -65,9 +65,10 @@ class _DesktopWebViewState extends State<_DesktopWebView> {
       initialUrlRequest: URLRequest(url: WebUri(widget.url)),
       initialSettings: InAppWebViewSettings(
         transparentBackground: true,
-        // Needed so window.open / target=_blank surface via onCreateWindow
-        // (which we redirect to the system browser) instead of being swallowed.
-        javaScriptCanOpenWindowsAutomatically: true,
+        // A window.open / target=_blank click surfaces via onCreateWindow, which
+        // sends it to the system browser. A page opening one with no click (this
+        // also hosts video embeds from model replies) is refused.
+        javaScriptCanOpenWindowsAutomatically: false,
         supportMultipleWindows: true,
         // Route every top-frame navigation through shouldOverrideUrlLoading so
         // plain <a href> links (no target=_blank) can't hijack the embed.
@@ -87,7 +88,7 @@ class _DesktopWebViewState extends State<_DesktopWebView> {
             callback: (args) {
               final url = args.isNotEmpty ? args.first?.toString() : null;
               if (url != null && url.isNotEmpty) {
-                launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                openLinkExternally(Uri.tryParse(url));
               }
             });
       },
@@ -119,19 +120,22 @@ class _DesktopWebViewState extends State<_DesktopWebView> {
               scheme == origin.scheme.toLowerCase();
           if (sameOrigin) return NavigationActionPolicy.ALLOW;
         }
-        // External http(s) origin, mailto:, tel:, custom schemes → OS handler.
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        // An external http(s) origin, mailto: or tel: goes to the OS. Any other
+        // scheme is refused: this page can be remote, and a scheme's handler is
+        // another program.
+        await openLinkExternally(uri);
         return NavigationActionPolicy.CANCEL;
       },
       // Safety net: any window.open / target=_blank (e.g. an app that didn't use
       // the bridge) opens in the system browser rather than a broken in-webview
       // popup. Same-webview navigations (the app's own pages) are unaffected.
-      onCreateWindow: (controller, createWindowAction) async {
-        final url = createWindowAction.request.url;
-        if (url != null) {
-          await launchUrl(url, mode: LaunchMode.externalApplication);
+      // True keeps it out of this webview. WebView2 alone reports a popup with
+      // no click (its blocker is off), so one is dropped here.
+      onCreateWindow: (controller, action) async {
+        if (action.hasGesture != false) {
+          await openLinkExternally(action.request.url);
         }
-        return false;
+        return true;
       },
       onLoadStop: (_, _) => _post('senclaw:init'),
     );
@@ -163,8 +167,7 @@ class _OpenInBrowser extends StatelessWidget {
           ),
           const SizedBox(height: AppTokens.s16),
           FilledButton.icon(
-            onPressed: () => launchUrl(Uri.parse(url),
-                mode: LaunchMode.externalApplication),
+            onPressed: () => openLinkExternally(Uri.tryParse(url)),
             icon: const Icon(Icons.open_in_new, size: 16),
             label: Text(context.tr('Open in browser')),
           ),

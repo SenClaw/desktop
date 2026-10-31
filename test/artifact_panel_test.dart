@@ -44,4 +44,18 @@ void main() {
     await t.tap(find.byIcon(Icons.close));
     expect(closed, 1);
   });
+
+  testWidgets('Open shows only when the pane did not show the artifact itself',
+      (t) async {
+    const art = WorkbenchArtifact(
+        id: 'a1', title: 'Local', mode: 'web', files: [], url: 'http://127.0.0.1:3000/');
+    var opened = 0;
+    await t.pumpWidget(_host(ArtifactHeader(
+        artifact: art, onClose: () {}, onOpen: () => opened++)));
+    await t.tap(find.text('Open'));
+    expect(opened, 1);
+
+    await t.pumpWidget(_host(ArtifactHeader(artifact: art, onClose: () {})));
+    expect(find.text('Open'), findsNothing);
+  });
 }

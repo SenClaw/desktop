@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/i18n/l10n.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/browser_url.dart';
 import '../../widgets/browser_web_view.dart';
 import '../background/bg_processes.dart';
 import '../dock/workbench_provider.dart';
+import 'artifact_panel.dart';
 import 'browser_provider.dart';
 
 /// The right-dock **Browser** pane — a real address-bar browser that replaces
 /// the old Workbench tab. It opens typed URLs, running dev servers (from
 /// `/api/bg-tasks`), `workbench:new` url artifacts and local HTML files, in an
-/// embedded WKWebView/WebView2 ([BrowserWebView], free navigation). Per chat
-/// (`key: ValueKey(jid)` at the call site), so each session keeps its own page.
+/// embedded WKWebView/WebView2 ([BrowserWebView], free navigation). A static
+/// artifact takes the empty state's place, so typing a URL still works and Home
+/// comes back to it. Per chat (`key: ValueKey(jid)` at the call site).
 class BrowserTab extends ConsumerStatefulWidget {
   const BrowserTab({super.key, required this.jid});
   final String jid;
@@ -40,19 +42,25 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
   /// Last external open-request seq we handled (from [browserProvider]).
   int _lastReqSeq = 0;
 
+  /// The artifact this pane has reacted to, so a new one is told from a rebuild.
+  String? _lastArtifactId;
+
+  WorkbenchArtifact? _artifactIn(Map<String, WorkbenchArtifact> all) =>
+      all[widget.jid] ?? all['_'];
+
   @override
   void initState() {
     super.initState();
     // Seed from an open-request raised while the pane was closed, else from the
     // latest url artifact for this chat.
     final req = ref.read(browserProvider(widget.jid));
+    final art = _artifactIn(ref.read(workbenchProvider));
+    _lastArtifactId = art?.id;
     if (req != null) {
-      _bootUrl = req.url;
+      _bootUrl = browserUrlFrom(req.url);
       _lastReqSeq = req.seq;
-    } else {
-      final art = ref.read(workbenchProvider)[widget.jid] ??
-          ref.read(workbenchProvider)['_'];
-      if (art?.url != null && art!.url!.isNotEmpty) _bootUrl = art.url;
+    } else if (art?.url != null) {
+      _bootUrl = browserUrlFrom(art!.url!);
     }
   }
 
@@ -63,21 +71,14 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
     super.dispose();
   }
 
-  /// Turn whatever the user typed into a loadable URL. A bare `localhost:3000`
-  /// becomes `http://…`; anything else with no scheme gets `https://`.
-  String _normalize(String input) {
-    final s = input.trim();
-    if (s.isEmpty || s.contains('://')) return s;
-    final local = s.startsWith('localhost') ||
-        s.startsWith('127.0.0.1') ||
-        s.startsWith('0.0.0.0') ||
-        s.startsWith('[::1]');
-    return '${local ? 'http' : 'https'}://$s';
-  }
-
   void _go(String raw) {
-    final url = _normalize(raw);
-    if (url.isEmpty) return;
+    if (raw.trim().isEmpty) return;
+    final url = browserUrlFrom(raw);
+    if (url == null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+          content: Text(context.tr('Only http and https pages open here.'))));
+      return;
+    }
     if (!_booted) {
       setState(() => _bootUrl = url);
     } else if (_ctrl != null) {
@@ -87,6 +88,13 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
     }
     _addrFocus.unfocus();
   }
+
+  void _goHome() => setState(() {
+        _bootUrl = null;
+        _ctrl = null;
+        _nav = const BrowserNavState();
+        _addr.clear();
+      });
 
   void _onControllerReady(BrowserWebController c) {
     _ctrl = c;
@@ -106,13 +114,31 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
 
   @override
   Widget build(BuildContext context) {
-    // Honour open-requests raised from outside the pane (auto-open, chips).
+    // Honour open-requests raised from outside the pane (a `:port` chip).
     ref.listen<BrowserOpenRequest?>(browserProvider(widget.jid), (_, next) {
       if (next != null && next.seq != _lastReqSeq) {
         _lastReqSeq = next.seq;
         _go(next.url);
       }
     });
+
+    // A new artifact shows at once: a url one here, a static one in the empty
+    // state's place.
+    ref.listen<Map<String, WorkbenchArtifact>>(workbenchProvider, (_, all) {
+      final art = _artifactIn(all);
+      if (art?.id == _lastArtifactId) return;
+      _lastArtifactId = art?.id;
+      if (art == null) return;
+      final url = art.url;
+      if (url != null && url.isNotEmpty) {
+        _go(url);
+      } else {
+        _goHome();
+      }
+    });
+
+    final art = _artifactIn(ref.watch(workbenchProvider));
+    final workbench = ref.read(workbenchProvider.notifier);
 
     return Column(
       children: [
@@ -125,24 +151,20 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
           onBack: _nav.canGoBack ? () => _ctrl?.goBack() : null,
           onForward: _nav.canGoForward ? () => _ctrl?.goForward() : null,
           onReload: _booted ? () => _ctrl?.reload() : null,
-          onHome: _booted
-              ? () => setState(() {
-                    _bootUrl = null;
-                    _ctrl = null;
-                    _nav = const BrowserNavState();
-                    _addr.clear();
-                  })
-              : null,
+          onHome: _booted ? _goHome : null,
           onExternal: () {
-            final u = _nav.url.isNotEmpty ? _nav.url : _normalize(_addr.text);
-            if (u.isNotEmpty) {
-              launchUrl(Uri.parse(u), mode: LaunchMode.externalApplication);
-            }
+            final u = _nav.url.isNotEmpty ? _nav.url : _addr.text;
+            openWebUrlExternally(Uri.tryParse(browserUrlFrom(u) ?? ''));
           },
         ),
         if (_nav.isLoading)
           LinearProgressIndicator(
               value: _nav.progress > 0 ? _nav.progress : null, minHeight: 2),
+        if (art != null)
+          ArtifactHeader(
+            artifact: art,
+            onClose: () => workbench.close(widget.jid, art.id),
+          ),
         Expanded(
           child: _booted
               ? BrowserWebView(
@@ -151,7 +173,14 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
                   onControllerReady: _onControllerReady,
                   onStateChanged: _onNav,
                 )
-              : _BrowserEmptyState(jid: widget.jid, onOpen: _go),
+              : art != null && (art.url ?? '').isEmpty
+                  ? ArtifactFiles(
+                      key: ValueKey(art.id),
+                      files: art.files,
+                      readFile: (path) =>
+                          workbench.readFile(widget.jid, art.id, path),
+                    )
+                  : _BrowserEmptyState(jid: widget.jid, onOpen: _go),
         ),
       ],
     );

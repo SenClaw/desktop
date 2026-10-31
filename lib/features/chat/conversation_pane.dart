@@ -566,6 +566,8 @@ class _ConversationPaneState extends ConsumerState<ConversationPane> {
                   ref
                       .read(browserProvider(widget.jid).notifier)
                       .open('http://127.0.0.1:$port/');
+                  // An open file hides the dock; the click has to show the page.
+                  ref.read(filePaneProvider(widget.jid).notifier).hide();
                   ref.read(dockVisibleProvider.notifier).state = true;
                   ref.read(dockTabProvider.notifier).state = 1;
                 },

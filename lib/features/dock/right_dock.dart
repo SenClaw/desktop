@@ -23,7 +23,10 @@ import '../browser/browser_tab.dart';
 
 /// Whether the right dock is shown, and which tab is active.
 final dockVisibleProvider = StateProvider<bool>((ref) => false);
-final dockTabProvider = StateProvider<int>((ref) => 0); // 0=Console 1=Workbench
+final dockTabProvider = StateProvider<int>((ref) => 0); // 0=Console 1=Browser
+
+/// Index of the Terminal tab in [dockTabProvider].
+const _terminalTab = 4;
 
 /// Console ACTIVITY rendering mode: markdown (default) or raw mono text.
 /// Sub-agent activity is markdown — headings, bullets, `code` — and reading it
@@ -38,8 +41,58 @@ final dockWidthProvider = StateProvider<double>((ref) {
   return double.tryParse(s) ?? AppTokens.dockMinWidth;
 });
 
-/// The right-hand dock: Agent Console (sub-agent dispatch activity) + Workbench
-/// (artifacts). Ported from the React AppLayout right dock.
+/// The active dock tab, with the Terminal kept mounted behind it once opened:
+/// closing its socket kills the shell and everything running in it, so leaving
+/// the tab must not. Keyed by chat at the call site, so a chat's shell ends with
+/// that chat, as before. ExcludeFocus keeps keystrokes out of a hidden terminal.
+class DockTabBody extends StatefulWidget {
+  const DockTabBody({
+    super.key,
+    required this.terminalActive,
+    required this.terminal,
+    required this.child,
+  });
+  final bool terminalActive;
+  final Widget Function() terminal;
+
+  /// Shown when the Terminal is not the active tab.
+  final Widget child;
+
+  @override
+  State<DockTabBody> createState() => _DockTabBodyState();
+}
+
+class _DockTabBodyState extends State<DockTabBody> {
+  late bool _terminalOpened = widget.terminalActive;
+
+  @override
+  void didUpdateWidget(DockTabBody old) {
+    super.didUpdateWidget(old);
+    _terminalOpened = _terminalOpened || widget.terminalActive;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (_terminalOpened)
+          ExcludeFocus(
+            excluding: !widget.terminalActive,
+            child: Visibility(
+              visible: widget.terminalActive,
+              maintainState: true,
+              child: widget.terminal(),
+            ),
+          ),
+        if (!widget.terminalActive) widget.child,
+      ],
+    );
+  }
+}
+
+/// The right-hand dock: Agent Console (sub-agent dispatch activity) + Browser
+/// and the other tabs. Ported from the React AppLayout right dock.
 class RightDock extends ConsumerWidget {
   const RightDock({super.key, required this.jid});
   final String jid;
@@ -143,14 +196,18 @@ class RightDock extends ConsumerWidget {
             ),
           ),
           Expanded(
-            child: switch (tab) {
-              0 => const _ConsoleTab(),
-              1 => BrowserTab(key: ValueKey(jid), jid: jid),
-              2 => _FilesTab(jid: jid),
-              3 => const _AppsDockTab(),
-              4 => _TerminalTab(key: ValueKey(jid), jid: jid),
-              _ => ChangesTab(key: ValueKey(jid), jid: jid),
-            },
+            child: DockTabBody(
+              key: ValueKey(jid),
+              terminalActive: tab == _terminalTab,
+              terminal: () => _TerminalTab(jid: jid),
+              child: switch (tab) {
+                0 => const _ConsoleTab(),
+                1 => BrowserTab(key: ValueKey(jid), jid: jid),
+                2 => _FilesTab(jid: jid),
+                3 => const _AppsDockTab(),
+                _ => ChangesTab(key: ValueKey(jid), jid: jid),
+              },
+            ),
           ),
         ],
       ),
@@ -845,7 +902,7 @@ class _AppsDockTab extends ConsumerWidget {
 /// current chat session's workspace dir (falls back to $HOME server-side).
 /// Keyed by jid in the parent so switching sessions starts a fresh shell.
 class _TerminalTab extends ConsumerStatefulWidget {
-  const _TerminalTab({super.key, required this.jid});
+  const _TerminalTab({required this.jid});
   final String jid;
   @override
   ConsumerState<_TerminalTab> createState() => _TerminalTabState();

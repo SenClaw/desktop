@@ -164,6 +164,14 @@ Rules:
   (`bgRunningCountProvider`). One `bgProcessesProvider` polls every 3 s for all three. They
   are not the scheduled tasks of `BackgroundScreen`. A test that mounts `AppShell` must
   override `bgProcessesProvider` (the rail watches it), as `projects_layout_test.dart` does.
+- **Browser pane (`lib/features/browser/`)** hosts the open internet, so three things are not to be undone.
+  Every URL it loads or hands to the OS goes through `browserUrlFrom` / `openWebUrlExternally`
+  (`lib/widgets/browser_url.dart`): http and https only, because a popup reaches `NSWorkspace.open` /
+  `ShellExecuteW` and would otherwise start `ms-msdt:` or `smb:` handlers. `onCreateWindow` answers
+  `true`: false has the plugin load the request in the pane. And nothing opens by itself: a page on a
+  loopback port passes the daemon's local-Origin check and can read provider keys, so a dev server opens
+  only from a click on its chip. `DockTabBody` keeps the Terminal mounted across tab changes, because
+  unmounting it closes the socket and the daemon kills the shell.
 - **File pane (`lib/features/file_pane/`)** is what a file row of a `ToolGroupCard` opens: the
   file beside the chat, read through `GET /api/workspace/file` (the daemon route the dock's Files
   tab uses; 512 KB cap). `FilePaneSplit` positions the chat instead of reparenting it, so a

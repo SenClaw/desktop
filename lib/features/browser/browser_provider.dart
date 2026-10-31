@@ -1,10 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// A request to open a URL in a chat's Browser pane that comes from OUTSIDE the
-/// pane — a dev-server auto-open, a `:port` chip, or a `workbench:new` url
-/// artifact. The [seq] makes each request distinct, so the pane re-navigates
-/// even to a URL it already shows, and so a request raised while the dock was
-/// closed is still honoured the moment the pane mounts.
+/// pane: a click on a `:port` chip. Nothing opens here on its own, because a page
+/// on a loopback port gets the daemon's trust, and that has to be a person's
+/// choice. The [seq] makes each request distinct, so the pane re-navigates even
+/// to a URL it already shows, and so a request raised while the dock was closed
+/// is still honoured the moment the pane mounts.
 class BrowserOpenRequest {
   const BrowserOpenRequest(this.url, this.seq);
   final String url;
@@ -18,8 +19,8 @@ class BrowserNotifier extends StateNotifier<BrowserOpenRequest?> {
 }
 
 /// Per-chat pending open request for the Browser pane. Deliberately NOT
-/// autoDispose: an auto-open that fires while the dock is closed must survive
-/// until the pane is opened and reads it.
+/// autoDispose: a click that arrives while the pane is unmounted must survive
+/// until it mounts and reads it.
 final browserProvider =
     StateNotifierProvider.family<BrowserNotifier, BrowserOpenRequest?, String>(
   (ref, jid) => BrowserNotifier(),

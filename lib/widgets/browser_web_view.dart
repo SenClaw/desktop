@@ -2,10 +2,18 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../core/i18n/l10n.dart';
 import '../theme/tokens.dart';
+import 'browser_url.dart';
+
+/// A popup never opens in here: a web page goes to the OS browser and any other
+/// scheme is dropped. Answering true is what keeps it out of this webview, since
+/// false has the plugin load the request in place.
+Future<bool> _openPopupExternally(Uri? url) async {
+  await openWebUrlExternally(url);
+  return true;
+}
 
 /// Live navigation state reported up to the browser chrome (address bar, nav
 /// buttons) so it can reflect the current page.
@@ -114,9 +122,9 @@ class _BrowserWebViewState extends State<BrowserWebView> {
       initialUrlRequest: URLRequest(url: WebUri(widget.initialUrl)),
       initialSettings: InAppWebViewSettings(
         transparentBackground: true,
-        // Let the page open popups; onCreateWindow sends them to a real tab
-        // inside the pane's host is out of scope, so route to the OS browser.
-        javaScriptCanOpenWindowsAutomatically: true,
+        // A page opens a window only from a click, and onCreateWindow routes
+        // that one out of the pane.
+        javaScriptCanOpenWindowsAutomatically: false,
         supportMultipleWindows: true,
       ),
       onWebViewCreated: (c) {
@@ -151,14 +159,9 @@ class _BrowserWebViewState extends State<BrowserWebView> {
         await _refreshNavFlags();
       },
       // A browser follows links in place; only window.open / target=_blank
-      // popups (which would be a broken in-webview window) go to the OS browser.
-      onCreateWindow: (controller, createWindowAction) async {
-        final url = createWindowAction.request.url;
-        if (url != null) {
-          await launchUrl(url, mode: LaunchMode.externalApplication);
-        }
-        return false;
-      },
+      // popups (which would be a broken in-webview window) leave the pane.
+      onCreateWindow: (controller, action) =>
+          _openPopupExternally(action.request.url),
     );
   }
 }
@@ -188,8 +191,7 @@ class _OpenInBrowserFallback extends StatelessWidget {
           ),
           const SizedBox(height: AppTokens.s16),
           FilledButton.icon(
-            onPressed: () => launchUrl(Uri.parse(url),
-                mode: LaunchMode.externalApplication),
+            onPressed: () => openWebUrlExternally(Uri.tryParse(url)),
             icon: const Icon(Icons.open_in_new, size: 16),
             label: Text(context.tr('Open in browser')),
           ),
@@ -221,15 +223,8 @@ class EmbeddedHtmlContent extends StatelessWidget {
         baseUrl: baseUrl != null ? WebUri(baseUrl!) : null,
       ),
       initialSettings: InAppWebViewSettings(transparentBackground: true),
-      // A preview, not a browser: a link the page follows opens in the OS
-      // browser rather than navigating the preview away.
-      onCreateWindow: (controller, action) async {
-        final url = action.request.url;
-        if (url != null) {
-          await launchUrl(url, mode: LaunchMode.externalApplication);
-        }
-        return false;
-      },
+      onCreateWindow: (controller, action) =>
+          _openPopupExternally(action.request.url),
     );
   }
 }

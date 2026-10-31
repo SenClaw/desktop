@@ -12,6 +12,8 @@
 const Map<String, String> viBrowser = {
   // Settings nav + Runtime catalog type filter
   'Browser': 'Trình duyệt',
+  'Only http and https pages open here.':
+      'Chỉ mở được trang http và https ở đây.',
 
   // Engine status
   'Browser engine': 'Engine trình duyệt',

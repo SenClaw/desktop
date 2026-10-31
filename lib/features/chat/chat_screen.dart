@@ -5,7 +5,6 @@ import '../../core/prefs.dart';
 import '../../theme/tokens.dart';
 import '../../core/transport/connection.dart';
 import '../../models/group.dart';
-import '../browser/dev_server_watcher.dart';
 import '../dock/right_dock.dart';
 import '../file_pane/file_pane_provider.dart';
 import '../file_pane/file_pane_split.dart';
@@ -115,9 +114,6 @@ class ChatScreen extends ConsumerWidget {
                     )
                   : Row(
                       children: [
-                        // Hands-free: opens the Browser pane when this chat's
-                        // agent starts a dev server. Zero-size.
-                        DevServerAutoOpen(jid: selected),
                         Expanded(
                           child: FilePaneSplit(
                             jid: selected,

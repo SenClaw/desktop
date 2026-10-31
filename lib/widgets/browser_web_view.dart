@@ -17,8 +17,9 @@ Future<bool> _openPopupExternally(CreateWindowAction action) async {
   return true;
 }
 
-/// WebView2 offers an unknown top-frame scheme to the OS itself, and a page can
-/// ask for one with `location = 'ms-msdt:...'`; WebKit only fails the load.
+/// Keeps a page on web schemes. WebKit only fails a jump to an unknown one, as
+/// the live probe shows. WebView2 offers such a jump to the OS behind its own
+/// prompt, and this may not see it there: a second layer, not a guarantee.
 NavigationActionPolicy _pageNavigation(NavigationAction action, Set<String> allowed) {
   final scheme = action.request.url?.scheme.toLowerCase() ?? '';
   return action.isForMainFrame == false || allowed.contains(scheme)

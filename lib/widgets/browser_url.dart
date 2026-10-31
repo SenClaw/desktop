@@ -33,7 +33,8 @@ bool isExternalLink(Uri? url) =>
 /// one only from a person's click. A host written as a bare number (`127.1`,
 /// `2130706433`) counts too: the engine resolves it to the same place.
 bool isLoopbackUrl(String url) {
-  final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
+  // As the pane would load it: a bare `localhost:5173` has no host until then.
+  final host = Uri.tryParse(browserUrlFrom(url) ?? url)?.host.toLowerCase() ?? '';
   if (host == 'localhost') return true;
   final ip = InternetAddress.tryParse(host);
   if (ip != null) return ip.isLoopback || host == '0.0.0.0';

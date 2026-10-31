@@ -170,9 +170,12 @@ Rules:
   `ShellExecuteW` and would otherwise start `ms-msdt:` or `smb:` handlers. `onCreateWindow` answers
   `true`: false has the plugin load the request in the pane. `embeddedWebView` shares that rule (plus
   `mailto:` and `tel:`, through `openLinkExternally`), because it hosts remote video pages from model
-  replies. And no loopback page opens by itself (`isLoopbackUrl`): one passes the daemon's local-Origin
-  check and can read provider keys, so a dev server opens from a click on its chip and a `web` artifact
-  from the header's Open, while a remote artifact still shows at once. `DockTabBody` keeps the Terminal mounted across tab changes, because
+  replies; only a page on loopback, such as a Space App, may open a window with no click, since apps do
+  that after fetching an OAuth link. The pane never loads a loopback URL by itself (`isLoopbackUrl`): such
+  a page passes the daemon's local-Origin check and can read provider keys, so a dev server opens from a
+  click on its chip and a `web` artifact from the header's Open, while a remote artifact shows at once.
+  That closes the pane's own paths, not the hole: a remote page can still redirect to loopback, and only
+  the daemon trusting nothing but the console's own origin ends it. `DockTabBody` keeps the Terminal mounted across tab changes, because
   unmounting it closes the socket and the daemon kills the shell.
 - **File pane (`lib/features/file_pane/`)** is what a file row of a `ToolGroupCard` opens: the
   file beside the chat, read through `GET /api/workspace/file` (the daemon route the dock's Files

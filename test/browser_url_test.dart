@@ -92,6 +92,9 @@ void main() {
       'http://127.1:3000/',
       'http://2130706433/',
       'http://0x7f.0.0.1/',
+      'localhost:5173',
+      '127.0.0.1:5173/x',
+      '[::1]:5173',
     ]) {
       expect(isLoopbackUrl(local), isTrue, reason: local);
     }

@@ -58,6 +58,9 @@ class _DesktopWebViewState extends State<_DesktopWebView> {
     if (old.theme != widget.theme) _post('senclaw:theme');
   }
 
+  /// Served from this machine, as Space Apps and widgets are.
+  bool get _local => isLoopbackUrl(widget.url);
+
   @override
   Widget build(BuildContext context) {
     return InAppWebView(
@@ -65,10 +68,11 @@ class _DesktopWebViewState extends State<_DesktopWebView> {
       initialUrlRequest: URLRequest(url: WebUri(widget.url)),
       initialSettings: InAppWebViewSettings(
         transparentBackground: true,
-        // A window.open / target=_blank click surfaces via onCreateWindow, which
-        // sends it to the system browser. A page opening one with no click (this
-        // also hosts video embeds from model replies) is refused.
-        javaScriptCanOpenWindowsAutomatically: false,
+        // window.open / target=_blank surface via onCreateWindow, which sends
+        // them to the system browser. A Space App on this machine may do that
+        // after an await (an OAuth link it had to fetch first). A remote page,
+        // such as a video embed from a model reply, needs a click.
+        javaScriptCanOpenWindowsAutomatically: _local,
         supportMultipleWindows: true,
         // Route every top-frame navigation through shouldOverrideUrlLoading so
         // plain <a href> links (no target=_blank) can't hijack the embed.
@@ -130,9 +134,9 @@ class _DesktopWebViewState extends State<_DesktopWebView> {
       // the bridge) opens in the system browser rather than a broken in-webview
       // popup. Same-webview navigations (the app's own pages) are unaffected.
       // True keeps it out of this webview. WebView2 alone reports a popup with
-      // no click (its blocker is off), so one is dropped here.
+      // no click (its blocker is off), so a remote page's one is dropped here.
       onCreateWindow: (controller, action) async {
-        if (action.hasGesture != false) {
+        if (_local || action.hasGesture != false) {
           await openLinkExternally(action.request.url);
         }
         return true;

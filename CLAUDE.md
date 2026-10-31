@@ -7,7 +7,10 @@ This file provides guidance to Claude Code when working in this repository.
 SenClaw Desktop is the Flutter console (macOS / Windows / Linux / web) for
 [SenClaw](../senclaw). It supervises the `senclaw` daemon as a child process
 (`lib/core/daemon/daemon_supervisor.dart`) and talks to it over HTTP/WS —
-never embeds a webview, never links daemon code. `../senclaw` (daemon, Rust),
+never links daemon code. It embeds a WKWebView/WebView2 on macOS & Windows
+(`flutter_inappwebview`) for the Browser pane, Space Apps and widgets; Linux
+has no embedded webview and falls back to an "open in browser" card.
+`../senclaw` (daemon, Rust),
 `../web-app` (React web console) and `../sen-*` (inference runtimes) are
 sibling repos split out of the old monorepo; this repo owns only `lib/`,
 `macos/ windows/ linux/ web/` (platform runners) and `update_desktop/` (the

@@ -232,9 +232,17 @@ class _BgLogState extends ConsumerState<_BgLog> {
 
 /// One process: what it is, where it listens, how long it has run, and the buttons.
 class BgProcessRow extends ConsumerStatefulWidget {
-  const BgProcessRow({super.key, required this.process, this.showChat = false});
+  const BgProcessRow(
+      {super.key,
+      required this.process,
+      this.showChat = false,
+      this.onOpenInPane});
   final BgProcess process;
   final bool showChat;
+
+  /// When set (chat context only), a `:port` chip opens that port in the in-app
+  /// Browser pane; a small icon beside it still opens the system browser.
+  final void Function(int port)? onOpenInPane;
 
   @override
   ConsumerState<BgProcessRow> createState() => _BgProcessRowState();
@@ -334,20 +342,49 @@ class _BgProcessRowState extends ConsumerState<BgProcessRow> {
                   for (final port in p.ports)
                     Padding(
                       padding: const EdgeInsets.only(left: AppTokens.s6),
-                      child: Tooltip(
-                        message: context.trArgs(
-                            'Open port {port} in a new tab', {'port': port}),
-                        child: ActionChip(
-                          label: Text(':$port',
-                              style: TextStyle(
-                                  color: c.accent,
-                                  fontSize: 11,
-                                  fontFamily: AppTokens.fontMono)),
-                          visualDensity: VisualDensity.compact,
-                          onPressed: () => launchUrl(
-                              Uri.parse('http://127.0.0.1:$port/'),
-                              mode: LaunchMode.externalApplication),
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Tooltip(
+                            message: widget.onOpenInPane != null
+                                ? context.trArgs(
+                                    'Open port {port} in the browser pane',
+                                    {'port': port})
+                                : context.trArgs(
+                                    'Open port {port} in a new tab',
+                                    {'port': port}),
+                            child: ActionChip(
+                              label: Text(':$port',
+                                  style: TextStyle(
+                                      color: c.accent,
+                                      fontSize: 11,
+                                      fontFamily: AppTokens.fontMono)),
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () {
+                                final open = widget.onOpenInPane;
+                                if (open != null) {
+                                  open(port);
+                                } else {
+                                  launchUrl(
+                                      Uri.parse('http://127.0.0.1:$port/'),
+                                      mode: LaunchMode.externalApplication);
+                                }
+                              },
+                            ),
+                          ),
+                          if (widget.onOpenInPane != null)
+                            IconButton(
+                              tooltip: context.tr('Open externally'),
+                              icon: const Icon(Icons.open_in_new, size: 13),
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints.tightFor(
+                                  width: 26, height: 26),
+                              onPressed: () => launchUrl(
+                                  Uri.parse('http://127.0.0.1:$port/'),
+                                  mode: LaunchMode.externalApplication),
+                            ),
+                        ],
                       ),
                     ),
                 TextButton(
@@ -413,8 +450,11 @@ String _statusLabel(String status) => switch (status) {
 /// show it and nothing to end it. Also says when *other* chats have processes
 /// running: the one you forgot is rarely in the chat that is open.
 class BgProcessStrip extends ConsumerWidget {
-  const BgProcessStrip({super.key, required this.jid});
+  const BgProcessStrip({super.key, required this.jid, this.onOpenInPane});
   final String jid;
+
+  /// Opens a `:port` in the in-app Browser pane (chat context only).
+  final void Function(int port)? onOpenInPane;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -431,7 +471,9 @@ class BgProcessStrip extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final p in mine) BgProcessRow(key: ValueKey(p.id), process: p),
+          for (final p in mine)
+            BgProcessRow(
+                key: ValueKey(p.id), process: p, onOpenInPane: onOpenInPane),
           if (others > 0)
             Padding(
               padding: const EdgeInsets.only(top: AppTokens.s6),

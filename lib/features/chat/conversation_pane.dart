@@ -15,6 +15,7 @@ import '../../theme/tokens.dart';
 import '../cowork/cowork_providers.dart';
 import '../../models/cowork_models.dart' show CoworkTask;
 import '../dock/right_dock.dart';
+import '../browser/browser_provider.dart';
 import '../dock/dispatch_provider.dart';
 import 'dispatch_ownership.dart';
 import '../dock/todos_provider.dart';
@@ -556,7 +557,19 @@ class _ConversationPaneState extends ConsumerState<ConversationPane> {
         // Composer: input on top, action row (mode/model/attach/mic/send)
         // underneath — Claude-style.
         WatchStrip(jid: widget.jid),
-        BgProcessStrip(jid: widget.jid),
+        BgProcessStrip(
+          jid: widget.jid,
+          // In-pane open only where there is a dock (not the mini window).
+          onOpenInPane: ref.watch(subWindowIdProvider) != null
+              ? null
+              : (port) {
+                  ref
+                      .read(browserProvider(widget.jid).notifier)
+                      .open('http://127.0.0.1:$port/');
+                  ref.read(dockVisibleProvider.notifier).state = true;
+                  ref.read(dockTabProvider.notifier).state = 1;
+                },
+        ),
         _Composer(
           jid: widget.jid,
           mode: convo.agentMode,

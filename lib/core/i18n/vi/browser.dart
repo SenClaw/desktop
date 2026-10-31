@@ -106,4 +106,18 @@ const Map<String, String> viBrowser = {
   'The download failed:': 'Tải về thất bại:',
   'The decision runtime is not installed.': 'Runtime quyết định (sen-sysone) chưa được cài.',
   'The decision model is installed.': 'Đã cài xong mô hình quyết định.',
+
+  // Browser pane (right dock) — address bar, navigation and dev-server opening.
+  // "Back", "Reload", "Stop" (common.dart), "Open externally" (chat_widgets),
+  // "Web content" and "Open in browser" (shell_misc) are shared keys and are
+  // not repeated here.
+  'Forward': 'Tiến',
+  'Home': 'Trang chủ',
+  'Type a URL': 'Nhập URL',
+  'Browse the web': 'Duyệt web',
+  'Type a URL above, or open a running dev server below.':
+      'Nhập URL ở trên, hoặc mở một dev server đang chạy ở dưới.',
+  'Dev servers': 'Dev server',
+  'Open port {port} in the browser pane':
+      'Mở cổng {port} trong khung trình duyệt',
 };

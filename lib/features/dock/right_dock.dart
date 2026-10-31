@@ -19,7 +19,7 @@ import 'changes_tab.dart';
 import 'dispatch_provider.dart';
 import 'todo_group.dart';
 import 'todos_provider.dart';
-import 'workbench_provider.dart';
+import '../browser/browser_tab.dart';
 
 /// Whether the right dock is shown, and which tab is active.
 final dockVisibleProvider = StateProvider<bool>((ref) => false);
@@ -100,7 +100,7 @@ class RightDock extends ConsumerWidget {
                         _Tab(label: context.tr('Console'), active: tab == 0, onTap: () =>
                             ref.read(dockTabProvider.notifier).state = 0),
                         const SizedBox(width: AppTokens.s8),
-                        _Tab(label: context.tr('Workbench'), active: tab == 1, onTap: () =>
+                        _Tab(label: context.tr('Browser'), active: tab == 1, onTap: () =>
                             ref.read(dockTabProvider.notifier).state = 1),
                         const SizedBox(width: AppTokens.s8),
                         _Tab(label: context.tr('Files'), active: tab == 2, onTap: () =>
@@ -145,7 +145,7 @@ class RightDock extends ConsumerWidget {
           Expanded(
             child: switch (tab) {
               0 => const _ConsoleTab(),
-              1 => _WorkbenchTab(jid: jid),
+              1 => BrowserTab(key: ValueKey(jid), jid: jid),
               2 => _FilesTab(jid: jid),
               3 => const _AppsDockTab(),
               4 => _TerminalTab(key: ValueKey(jid), jid: jid),
@@ -467,136 +467,6 @@ class _TaskRow extends StatelessWidget {
   }
 }
 
-class _WorkbenchTab extends ConsumerStatefulWidget {
-  const _WorkbenchTab({required this.jid});
-  final String jid;
-  @override
-  ConsumerState<_WorkbenchTab> createState() => _WorkbenchTabState();
-}
-
-class _WorkbenchTabState extends ConsumerState<_WorkbenchTab> {
-  String? _openFile;
-  String? _content;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final art = ref.watch(workbenchProvider)[widget.jid] ??
-        ref.watch(workbenchProvider)['_'];
-    if (art == null) {
-      return Center(
-        child: Text(context.tr('No artifacts yet'),
-            style: TextStyle(color: c.textMuted, fontSize: 12)),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(AppTokens.s12),
-          child: Row(
-            children: [
-              Icon(Icons.widgets_outlined, size: 16, color: c.accent),
-              const SizedBox(width: AppTokens.s8),
-              Expanded(
-                child: Text(art.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        color: c.textPrimary, fontWeight: FontWeight.w700)),
-              ),
-              Text(art.mode, style: TextStyle(color: c.textMuted, fontSize: 12)),
-              IconButton(
-                tooltip: context.tr('Close artifact'),
-                icon: const Icon(Icons.close, size: 16),
-                onPressed: () => ref
-                    .read(workbenchProvider.notifier)
-                    .close(widget.jid, art.id),
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1),
-        // web / backend artifacts render embedded (iframe on web, open-in-
-        // browser on desktop); static artifacts show their file tree.
-        if (art.url != null && art.url!.isNotEmpty)
-          Expanded(
-              child: embeddedWebView(art.url!,
-                  title: art.title,
-                  theme: Theme.of(context).brightness == Brightness.dark
-                      ? 'dark'
-                      : 'light'))
-        else
-        Expanded(
-          child: _openFile == null
-              ? ListView(
-                  children: [
-                    for (final f in art.files)
-                      ListTile(
-                        dense: true,
-                        leading:
-                            const Icon(Icons.insert_drive_file_outlined, size: 16),
-                        title: Text(f, style: const TextStyle(fontSize: 12)),
-                        onTap: () async {
-                          final content = await ref
-                              .read(workbenchProvider.notifier)
-                              .readFile(widget.jid, art.id, f);
-                          setState(() {
-                            _openFile = f;
-                            _content = content;
-                          });
-                        },
-                      ),
-                  ],
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: AppTokens.s12, vertical: AppTokens.s4),
-                      child: Row(
-                        children: [
-                          TextButton.icon(
-                            onPressed: () => setState(() {
-                              _openFile = null;
-                              _content = null;
-                            }),
-                            icon: const Icon(Icons.arrow_back, size: 14),
-                            label: Text(context.tr('Files')),
-                          ),
-                          const SizedBox(width: AppTokens.s8),
-                          Expanded(
-                            child: Text(_openFile!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style:
-                                    TextStyle(color: c.textMuted, fontSize: 12)),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(AppTokens.s12),
-                        child: SelectableText(
-                          _content ?? '',
-                          style: TextStyle(
-                            color: c.textSecondary,
-                            fontFamily: AppTokens.fontMono,
-                            fontSize: 12,
-                            height: 1.45,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-        ),
-      ],
-    );
-  }
-}
 
 /// Files tab — browses the CURRENT chat session's workspace dir (the group's
 /// `allowedWorkDirs`). Switching sessions re-roots the browser; chats without a

@@ -175,3 +175,8 @@ bool isMarkdownPath(String path) {
       name.endsWith('.markdown') ||
       name.endsWith('.mdx');
 }
+
+bool isHtmlPath(String path) {
+  final name = fileNameOf(path).toLowerCase();
+  return name.endsWith('.html') || name.endsWith('.htm');
+}

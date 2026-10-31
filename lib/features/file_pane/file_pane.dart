@@ -9,6 +9,7 @@ import '../chat/groups_provider.dart';
 import 'file_markdown_view.dart';
 import 'file_pane_provider.dart';
 import 'file_source_view.dart';
+import '../../widgets/browser_web_view.dart';
 import 'file_view_controller.dart';
 import 'markdown_outline.dart';
 
@@ -99,7 +100,11 @@ class _FilePaneState extends ConsumerState<FilePane> {
         : null;
     final outline = parsed != null && parsed.renderable ? parsed : null;
     final markdown = outline != null;
-    final source = !markdown || _showingSource.contains(path);
+    final html = isHtmlPath(path) &&
+        BrowserWebView.supported &&
+        data != null &&
+        !data.unreadable;
+    final source = !(markdown || html) || _showingSource.contains(path);
     final workDir = ref
         .watch(groupsProvider)
         .where((g) => g.jid == widget.jid)
@@ -202,7 +207,7 @@ class _FilePaneState extends ConsumerState<FilePane> {
               child: Row(
                 children: [
                   Expanded(child: _Breadcrumb(path: path, workDir: workDir)),
-                  if (markdown)
+                  if (markdown || html)
                     _ToolButton(
                       icon: Icons.code,
                       tooltip: source
@@ -281,7 +286,10 @@ class _FilePaneState extends ConsumerState<FilePane> {
             key: PageStorageKey('$path|$source'),
             child: source
                 ? FileSourceView(text: file.content, view: _view)
-                : FileMarkdownView(outline: outline!, view: _view),
+                : outline != null
+                    ? FileMarkdownView(outline: outline, view: _view)
+                    : EmbeddedHtmlContent(
+                        html: file.content, baseUrl: _htmlBaseUrl(path)),
           ),
         ),
         if (file.truncated)
@@ -293,6 +301,18 @@ class _FilePaneState extends ConsumerState<FilePane> {
           ),
       ],
     );
+  }
+
+  /// `file://…/` base for a single HTML file's relative links. See
+  /// [EmbeddedHtmlContent] on why sibling assets still won't load.
+  String? _htmlBaseUrl(String path) {
+    final i = path.lastIndexOf('/');
+    if (i < 0) return null;
+    try {
+      return Uri.directory(path.substring(0, i + 1)).toString();
+    } catch (_) {
+      return null;
+    }
   }
 
   String _reasonFor(BuildContext context, Object error) {
